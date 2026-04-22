@@ -106,7 +106,18 @@ class AuthService {
       );
       await saveSession(token: token, user: user);
       return user;
-    } catch (_) {
+    } catch (e) {
+      final error = e.toString().toLowerCase();
+      final isConnectionIssue =
+          error.contains('timed out') ||
+          error.contains('socket') ||
+          error.contains('failed host lookup') ||
+          error.contains('no se pudo conectar');
+
+      if (!isConnectionIssue) {
+        rethrow;
+      }
+
       final demoUser = DemoRepository.demoUserFromEmail(email);
       await saveSession(token: demoToken, user: demoUser);
       return demoUser;
@@ -118,10 +129,17 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    final fullName = name.trim();
+    final parts = fullName.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final nombre = parts.isEmpty ? fullName : parts.first;
+    final apellido = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+
     try {
       final response = await _postJsonWithApiFallback(
         '/auth/register',
         <String, dynamic>{
+          'nombre': nombre,
+          'apellido': apellido,
           'name': name,
           'email': email,
           'password': password,

@@ -983,61 +983,112 @@ class _ChatsPageState extends State<ChatsPage> {
   }
 
   Future<void> _openCreateChatDialog() async {
-    final nameController = TextEditingController();
-    var isGroup = true;
+    final searchController = TextEditingController();
+    List<AppUser> searchResults = const <AppUser>[];
+    bool searching = false;
+    int activeSearchId = 0;
+
     final created = await showDialog<ChatPreview>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            Future<void> runSearch(String raw) async {
+              final query = raw.trim();
+              activeSearchId += 1;
+              final searchId = activeSearchId;
+
+              if (query.length < 2) {
+                setModalState(() {
+                  searching = false;
+                  searchResults = const <AppUser>[];
+                });
+                return;
+              }
+
+              setModalState(() {
+                searching = true;
+              });
+
+              final results = await _apiService.searchUsers(query);
+              if (!context.mounted || searchId != activeSearchId) {
+                return;
+              }
+
+              setModalState(() {
+                searching = false;
+                searchResults = results;
+              });
+            }
+
             return AlertDialog(
               title: const Text('Nueva conversacion'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre del chat',
-                      border: OutlineInputBorder(),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: searchController,
+                      onChanged: runSearch,
+                      decoration: const InputDecoration(
+                        labelText: 'Buscar por nombre o email',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: true, label: Text('Grupo')),
-                      ButtonSegment(value: false, label: Text('Directo')),
-                    ],
-                    selected: {isGroup},
-                    onSelectionChanged: (value) {
-                      setModalState(() {
-                        isGroup = value.first;
-                      });
-                    },
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    if (searching)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: CircularProgressIndicator(),
+                      )
+                    else if (searchController.text.trim().length < 2)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text('Escribe al menos 2 caracteres.'),
+                      )
+                    else if (searchResults.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text('No se encontraron usuarios.'),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 280),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: searchResults.length,
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final user = searchResults[index];
+                            return ListTile(
+                              leading: CircleAvatar(
+                                child: Text(user.initials),
+                              ),
+                              title: Text(user.name),
+                              subtitle: Text(user.email),
+                              onTap: () async {
+                                final chat = await _apiService.createPrivateChat(
+                                  otherUser: user,
+                                );
+                                if (!context.mounted) {
+                                  return;
+                                }
+                                Navigator.of(context).pop(chat);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    final name = nameController.text.trim();
-                    if (name.isEmpty) {
-                      return;
-                    }
-                    final chat = await _apiService.createChat(
-                      name: name,
-                      isGroup: isGroup,
-                    );
-                    if (!context.mounted) {
-                      return;
-                    }
-                    Navigator.of(context).pop(chat);
-                  },
-                  child: const Text('Crear'),
                 ),
               ],
             );
@@ -1045,7 +1096,7 @@ class _ChatsPageState extends State<ChatsPage> {
         );
       },
     );
-    nameController.dispose();
+    searchController.dispose();
 
     if (created == null || !mounted) {
       return;

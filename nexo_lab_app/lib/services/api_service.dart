@@ -11,6 +11,47 @@ class ApiService {
 
   final AuthService _authService;
 
+  Future<List<AppUser>> searchUsers(String query) async {
+    final q = query.trim();
+    if (q.length < 2) {
+      return const <AppUser>[];
+    }
+
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'GET',
+        path: '/usuarios',
+        token: token,
+        queryParameters: <String, String>{'q': q},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Error buscando usuarios (${response.statusCode}).');
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) {
+        return const <AppUser>[];
+      }
+
+      return decoded
+          .whereType<Map>()
+          .map(
+            (u) => AppUser.fromJson(
+              u.map((k, v) => MapEntry(k.toString(), v)),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      return const <AppUser>[];
+    }
+  }
+
   Future<List<ChatPreview>> getChats() async {
     try {
       final token = await _authService.getToken();
@@ -108,6 +149,7 @@ class ApiService {
         path: '/chats/$chatId/messages',
         token: token,
         jsonBody: <String, dynamic>{
+          'contenido': content,
           'content': content,
           'type': type,
           if (attachment != null) 'attachment': attachment.toJson(),
@@ -135,6 +177,16 @@ class ApiService {
     required String name,
     required bool isGroup,
   }) async {
+    if (!isGroup) {
+      return DemoRepository.createChat(name: name, isGroup: false);
+    }
+
+    return DemoRepository.createChat(name: name, isGroup: true);
+  }
+
+  Future<ChatPreview> createPrivateChat({
+    required AppUser otherUser,
+  }) async {
     try {
       final token = await _authService.getToken();
       if (token == null || token.isEmpty) {
@@ -146,8 +198,7 @@ class ApiService {
         path: '/chats',
         token: token,
         jsonBody: <String, dynamic>{
-          'name': name,
-          'type': isGroup ? 'GROUP' : 'PRIVATE',
+          'otroUsuarioId': otherUser.id,
         },
       );
 
@@ -164,7 +215,7 @@ class ApiService {
         decoded.map((k, v) => MapEntry(k.toString(), v)),
       );
     } catch (_) {
-      return DemoRepository.createChat(name: name, isGroup: isGroup);
+      return DemoRepository.createChat(name: otherUser.name, isGroup: false);
     }
   }
 

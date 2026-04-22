@@ -24,17 +24,45 @@ class AppUser {
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'idUsuario': id,
     'name': name,
+    'nombre': firstName,
+    'apellido': lastName,
     'email': email,
     'role': role,
+    'rolSistema': role,
   };
 
+  String get firstName {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) {
+      return 'Usuario';
+    }
+    return parts.first;
+  }
+
+  String get lastName {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length <= 1) {
+      return '';
+    }
+    return parts.sublist(1).join(' ');
+  }
+
   factory AppUser.fromJson(Map<String, dynamic> json) {
+    final nombre = json['nombre']?.toString().trim() ?? '';
+    final apellido = json['apellido']?.toString().trim() ?? '';
+    final fullName = '$nombre $apellido'.trim();
+
     return AppUser(
-      id: toIntValue(json['id']) ?? 0,
-      name: json['name']?.toString() ?? 'Usuario',
+      id: toIntValue(json['id']) ?? toIntValue(json['idUsuario']) ?? 0,
+      name: fullName.isNotEmpty ? fullName : (json['name']?.toString() ?? 'Usuario'),
       email: json['email']?.toString() ?? '',
-      role: json['role']?.toString() ?? 'Usuario',
+      role:
+          json['role']?.toString() ??
+          json['rolSistema']?.toString() ??
+          json['rol_sistema']?.toString() ??
+          'USUARIO',
     );
   }
 }
@@ -61,24 +89,39 @@ class ChatPreview {
   factory ChatPreview.fromJson(Map<String, dynamic> json) {
     final rawDate =
         json['lastMessageAt']?.toString() ??
+        json['horaUltimoMensaje']?.toString() ??
         json['updatedAt']?.toString() ??
         json['last_message_at']?.toString();
     final rawType =
         json['type']?.toString() ??
+        json['tipoChat']?.toString() ??
         json['chatType']?.toString() ??
         (((json['isGroup'] ?? false) == true) ? 'GROUP' : 'PRIVATE');
 
+    final normalizedType = (() {
+      final t = rawType.trim().toUpperCase();
+      if (t == 'GRUPAL') {
+        return 'GROUP';
+      }
+      if (t == 'PRIVADO') {
+        return 'PRIVATE';
+      }
+      return t;
+    })();
+
     return ChatPreview(
-      id: toIntValue(json['id']) ?? 0,
-      name: json['name']?.toString() ?? 'Sin nombre',
-      type: rawType,
+      id: toIntValue(json['id']) ?? toIntValue(json['idChat']) ?? 0,
+      name: json['name']?.toString() ?? json['nombreChat']?.toString() ?? 'Sin nombre',
+      type: normalizedType,
       lastMessage:
           json['lastMessage']?.toString() ??
+          json['ultimoMensaje']?.toString() ??
           json['preview']?.toString() ??
           'Sin mensajes aun',
       lastMessageAt: rawDate == null ? null : DateTime.tryParse(rawDate),
       unreadCount:
           toIntValue(json['unreadCount']) ??
+          toIntValue(json['mensajesSinLeer']) ??
           toIntValue(json['unread']) ??
           0,
     );
@@ -107,11 +150,13 @@ class ChatAttachment {
       fileName:
           json['fileName']?.toString() ??
           json['filename']?.toString() ??
+          json['nombreArchivo']?.toString() ??
           json['name']?.toString() ??
           'archivo',
       fileType:
           json['fileType']?.toString() ??
           json['mimeType']?.toString() ??
+          json['tipoArchivo']?.toString() ??
           json['type']?.toString() ??
           'FILE',
     );
@@ -144,25 +189,56 @@ class ChatMessage {
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final rawTimestamp =
         json['timestamp']?.toString() ??
+        json['fechaEnviado']?.toString() ??
         json['sentAt']?.toString() ??
         json['createdAt']?.toString();
-    final rawAttachment = json['attachment'] ?? json['file'];
+    final rawAttachments = json['adjuntos'];
+    final dynamic firstAttachment =
+        (rawAttachments is List && rawAttachments.isNotEmpty)
+        ? rawAttachments.first
+        : null;
+    final rawAttachment = json['attachment'] ?? json['file'] ?? firstAttachment;
+
+    final rawStates = json['estados'];
+    Map<String, dynamic>? senderFromState;
+    if (rawStates is List) {
+      for (final state in rawStates.whereType<Map>()) {
+        final normalized = state.map((k, v) => MapEntry(k.toString(), v));
+        final estado = normalized['estado']?.toString().toUpperCase();
+        if (estado == 'ENVIADO') {
+          final rawUser = normalized['usuario'];
+          if (rawUser is Map) {
+            senderFromState = rawUser.map(
+              (k, v) => MapEntry(k.toString(), v),
+            );
+          }
+          break;
+        }
+      }
+    }
+
     final sender = json['sender'];
 
     return ChatMessage(
-      id: (json['id'] ?? DateTime.now().microsecondsSinceEpoch).toString(),
+      id: (json['id'] ?? json['idMensaje'] ?? DateTime.now().microsecondsSinceEpoch).toString(),
       senderId:
           toIntValue(json['senderId']) ??
           (sender is Map ? toIntValue(sender['id']) : null) ??
+          toIntValue(json['usuarioIdUsuario']) ??
+          (senderFromState != null ? toIntValue(senderFromState['idUsuario']) : null) ??
           toIntValue(json['userId']) ??
           0,
       senderName:
           json['senderName']?.toString() ??
           (sender is Map ? sender['name']?.toString() : null) ??
+          (senderFromState != null
+              ? '${senderFromState['nombre'] ?? ''} ${senderFromState['apellido'] ?? ''}'.trim()
+              : null) ??
           json['author']?.toString() ??
           'Usuario',
       content:
           json['content']?.toString() ??
+          json['contenido']?.toString() ??
           json['message']?.toString() ??
           json['text']?.toString() ??
           '',
