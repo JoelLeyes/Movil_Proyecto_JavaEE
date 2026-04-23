@@ -4,12 +4,18 @@ class AppUser {
     required this.name,
     required this.email,
     required this.role,
+    this.cargo,
+    this.sector,
+    this.status,
   });
 
   final int id;
   final String name;
   final String email;
   final String role;
+  final String? cargo;
+  final String? sector;
+  final String? status;
 
   String get initials {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -31,6 +37,9 @@ class AppUser {
     'email': email,
     'role': role,
     'rolSistema': role,
+    'cargo': cargo,
+    'sector': sector,
+    'tipoEstado': status,
   };
 
   String get firstName {
@@ -56,13 +65,52 @@ class AppUser {
 
     return AppUser(
       id: toIntValue(json['id']) ?? toIntValue(json['idUsuario']) ?? 0,
-      name: fullName.isNotEmpty ? fullName : (json['name']?.toString() ?? 'Usuario'),
+      name: fullName.isNotEmpty
+          ? fullName
+          : (json['name']?.toString() ?? 'Usuario'),
       email: json['email']?.toString() ?? '',
       role:
           json['role']?.toString() ??
           json['rolSistema']?.toString() ??
           json['rol_sistema']?.toString() ??
           'USUARIO',
+      cargo: json['cargo']?.toString(),
+      sector: json['sector']?.toString(),
+      status:
+          json['tipoEstado']?.toString() ??
+          json['estado']?.toString() ??
+          json['status']?.toString(),
+    );
+  }
+}
+
+class ChatParticipant {
+  const ChatParticipant({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.role,
+  });
+
+  final int id;
+  final String name;
+  final String email;
+  final String role;
+
+  bool get isAdmin => role.toUpperCase() == 'ADMINISTRADOR';
+
+  factory ChatParticipant.fromJson(Map<String, dynamic> json) {
+    final nombre = json['nombre']?.toString().trim() ?? '';
+    final apellido = json['apellido']?.toString().trim() ?? '';
+    final fullName = '$nombre $apellido'.trim();
+
+    return ChatParticipant(
+      id: toIntValue(json['id']) ?? toIntValue(json['idUsuario']) ?? 0,
+      name: fullName.isNotEmpty
+          ? fullName
+          : (json['name']?.toString() ?? 'Usuario'),
+      email: json['email']?.toString() ?? '',
+      role: json['rol']?.toString() ?? json['role']?.toString() ?? 'MIEMBRO',
     );
   }
 }
@@ -111,7 +159,10 @@ class ChatPreview {
 
     return ChatPreview(
       id: toIntValue(json['id']) ?? toIntValue(json['idChat']) ?? 0,
-      name: json['name']?.toString() ?? json['nombreChat']?.toString() ?? 'Sin nombre',
+      name:
+          json['name']?.toString() ??
+          json['nombreChat']?.toString() ??
+          'Sin nombre',
       type: normalizedType,
       lastMessage:
           json['lastMessage']?.toString() ??
@@ -129,10 +180,7 @@ class ChatPreview {
 }
 
 class ChatAttachment {
-  const ChatAttachment({
-    required this.fileName,
-    required this.fileType,
-  });
+  const ChatAttachment({required this.fileName, required this.fileType});
 
   final String fileName;
   final String fileType;
@@ -208,9 +256,7 @@ class ChatMessage {
         if (estado == 'ENVIADO') {
           final rawUser = normalized['usuario'];
           if (rawUser is Map) {
-            senderFromState = rawUser.map(
-              (k, v) => MapEntry(k.toString(), v),
-            );
+            senderFromState = rawUser.map((k, v) => MapEntry(k.toString(), v));
           }
           break;
         }
@@ -220,19 +266,26 @@ class ChatMessage {
     final sender = json['sender'];
 
     return ChatMessage(
-      id: (json['id'] ?? json['idMensaje'] ?? DateTime.now().microsecondsSinceEpoch).toString(),
+      id:
+          (json['id'] ??
+                  json['idMensaje'] ??
+                  DateTime.now().microsecondsSinceEpoch)
+              .toString(),
       senderId:
           toIntValue(json['senderId']) ??
           (sender is Map ? toIntValue(sender['id']) : null) ??
           toIntValue(json['usuarioIdUsuario']) ??
-          (senderFromState != null ? toIntValue(senderFromState['idUsuario']) : null) ??
+          (senderFromState != null
+              ? toIntValue(senderFromState['idUsuario'])
+              : null) ??
           toIntValue(json['userId']) ??
           0,
       senderName:
           json['senderName']?.toString() ??
           (sender is Map ? sender['name']?.toString() : null) ??
           (senderFromState != null
-              ? '${senderFromState['nombre'] ?? ''} ${senderFromState['apellido'] ?? ''}'.trim()
+              ? '${senderFromState['nombre'] ?? ''} ${senderFromState['apellido'] ?? ''}'
+                    .trim()
               : null) ??
           json['author']?.toString() ??
           'Usuario',

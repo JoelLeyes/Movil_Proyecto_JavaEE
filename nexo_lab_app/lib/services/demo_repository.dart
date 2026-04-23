@@ -1,6 +1,54 @@
 import '../models/chat_models.dart';
 
 class DemoRepository {
+  static final List<AppUser> _users = [
+    const AppUser(
+      id: 1,
+      name: 'Alvaro Garula',
+      email: 'alvaro@nexolab.com',
+      role: 'DESARROLLADOR',
+      cargo: 'Desarrollador Java',
+      sector: 'SISTEMAS',
+      status: 'DISPONIBLE',
+    ),
+    const AppUser(
+      id: 2,
+      name: 'Maria Lopez',
+      email: 'maria@nexolab.com',
+      role: 'LIDER',
+      cargo: 'Tech Lead',
+      sector: 'SISTEMAS',
+      status: 'DISPONIBLE',
+    ),
+    const AppUser(
+      id: 3,
+      name: 'Carlos Ramirez',
+      email: 'carlos@nexolab.com',
+      role: 'DESARROLLADOR',
+      cargo: 'Backend Dev',
+      sector: 'SISTEMAS',
+      status: 'OCUPADO',
+    ),
+    const AppUser(
+      id: 4,
+      name: 'Lucia Martinez',
+      email: 'lucia@nexolab.com',
+      role: 'QA',
+      cargo: 'QA Engineer',
+      sector: 'SISTEMAS',
+      status: 'EN_REUNION',
+    ),
+    const AppUser(
+      id: 5,
+      name: 'Ana Gomez',
+      email: 'ana@nexolab.com',
+      role: 'HR',
+      cargo: 'People Partner',
+      sector: 'RRHH',
+      status: 'DESCONECTADO',
+    ),
+  ];
+
   static final List<ChatPreview> _chats = [
     ChatPreview(
       id: 1,
@@ -109,18 +157,107 @@ class DemoRepository {
     ],
   };
 
+  static final Map<int, List<ChatParticipant>> _participantsByChat = {
+    1: const [
+      ChatParticipant(
+        id: 1,
+        name: 'Alvaro Garula',
+        email: 'alvaro@nexolab.com',
+        role: 'ADMINISTRADOR',
+      ),
+      ChatParticipant(
+        id: 2,
+        name: 'Maria Lopez',
+        email: 'maria@nexolab.com',
+        role: 'MIEMBRO',
+      ),
+      ChatParticipant(
+        id: 3,
+        name: 'Carlos Ramirez',
+        email: 'carlos@nexolab.com',
+        role: 'MIEMBRO',
+      ),
+    ],
+    2: const [
+      ChatParticipant(
+        id: 1,
+        name: 'Alvaro Garula',
+        email: 'alvaro@nexolab.com',
+        role: 'ADMINISTRADOR',
+      ),
+      ChatParticipant(
+        id: 4,
+        name: 'Lucia Martinez',
+        email: 'lucia@nexolab.com',
+        role: 'MIEMBRO',
+      ),
+    ],
+    4: const [
+      ChatParticipant(
+        id: 1,
+        name: 'Alvaro Garula',
+        email: 'alvaro@nexolab.com',
+        role: 'MIEMBRO',
+      ),
+      ChatParticipant(
+        id: 5,
+        name: 'Ana Gomez',
+        email: 'ana@nexolab.com',
+        role: 'ADMINISTRADOR',
+      ),
+    ],
+  };
+
+  static AppUser _currentDemoUser = _users.first;
+  static String _currentPassword = 'Demo123!';
+
   static int _idSequence = 2000;
 
   static AppUser demoUserFromEmail(String email) {
-    return AppUser(
-      id: 1,
-      name: 'Alvaro Garula',
+    _currentDemoUser = AppUser(
+      id: _currentDemoUser.id,
+      name: _currentDemoUser.name,
       email: email,
-      role: 'Desarrollador',
+      role: _currentDemoUser.role,
+      cargo: _currentDemoUser.cargo,
+      sector: _currentDemoUser.sector,
+      status: _currentDemoUser.status,
     );
+    return _currentDemoUser;
   }
 
   static List<ChatPreview> chats() => List<ChatPreview>.from(_chats);
+
+  static List<AppUser> searchUsers(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.length < 2) {
+      return const <AppUser>[];
+    }
+    return _users
+        .where(
+          (u) =>
+              u.id != _currentDemoUser.id &&
+              (u.name.toLowerCase().contains(q) ||
+                  u.email.toLowerCase().contains(q)),
+        )
+        .toList();
+  }
+
+  static AppUser? userById(int id) {
+    try {
+      return _users.firstWhere((u) => u.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static List<AppUser> usersByIds(List<int> ids) {
+    if (ids.isEmpty) {
+      return const <AppUser>[];
+    }
+    final set = ids.toSet();
+    return _users.where((u) => set.contains(u.id)).toList();
+  }
 
   static List<ChatMessage> messages(int chatId, {DateTime? since}) {
     final source = _messagesByChat[chatId] ?? const <ChatMessage>[];
@@ -129,6 +266,90 @@ class DemoRepository {
     }
     return source.where((m) => m.timestamp.isAfter(since)).toList();
   }
+
+  static List<ChatMessage> searchMessages(int chatId, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) {
+      return const <ChatMessage>[];
+    }
+    return (_messagesByChat[chatId] ?? const <ChatMessage>[])
+        .where((m) => m.content.toLowerCase().contains(q))
+        .toList();
+  }
+
+  static List<ChatParticipant> participants(int chatId) {
+    return List<ChatParticipant>.from(
+      _participantsByChat[chatId] ?? const <ChatParticipant>[],
+    );
+  }
+
+  static bool addParticipant(int chatId, AppUser user) {
+    final chat = _chats.firstWhere(
+      (c) => c.id == chatId,
+      orElse: () => const ChatPreview(
+        id: -1,
+        name: '',
+        type: 'GROUP',
+        lastMessage: '',
+        lastMessageAt: null,
+        unreadCount: 0,
+      ),
+    );
+    if (chat.id == -1 || !chat.isGroup) {
+      return false;
+    }
+
+    final list = _participantsByChat.putIfAbsent(
+      chatId,
+      () => <ChatParticipant>[],
+    );
+    if (list.any((p) => p.id == user.id)) {
+      return true;
+    }
+
+    list.add(
+      ChatParticipant(
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: 'MIEMBRO',
+      ),
+    );
+    return true;
+  }
+
+  static bool leaveGroup(int chatId, {int? userId}) {
+    final id = userId ?? _currentDemoUser.id;
+    final list = _participantsByChat[chatId];
+    if (list == null) {
+      return false;
+    }
+    list.removeWhere((p) => p.id == id);
+    return true;
+  }
+
+  static AppUser updateStatus(String status) {
+    _currentDemoUser = AppUser(
+      id: _currentDemoUser.id,
+      name: _currentDemoUser.name,
+      email: _currentDemoUser.email,
+      role: _currentDemoUser.role,
+      cargo: _currentDemoUser.cargo,
+      sector: _currentDemoUser.sector,
+      status: status,
+    );
+    return _currentDemoUser;
+  }
+
+  static bool updatePassword({required String current, required String next}) {
+    if (current != _currentPassword) {
+      return false;
+    }
+    _currentPassword = next;
+    return true;
+  }
+
+  static AppUser currentUser() => _currentDemoUser;
 
   static void appendMessage({
     required int chatId,
@@ -171,6 +392,7 @@ class DemoRepository {
   static ChatPreview createChat({
     required String name,
     required bool isGroup,
+    List<AppUser> members = const <AppUser>[],
   }) {
     _idSequence += 1;
     final chat = ChatPreview(
@@ -183,6 +405,25 @@ class DemoRepository {
     );
     _chats.insert(0, chat);
     _messagesByChat[_idSequence] = <ChatMessage>[];
+    if (isGroup) {
+      final participants = <ChatParticipant>[
+        ChatParticipant(
+          id: _currentDemoUser.id,
+          name: _currentDemoUser.name,
+          email: _currentDemoUser.email,
+          role: 'ADMINISTRADOR',
+        ),
+        ...members.map(
+          (m) => ChatParticipant(
+            id: m.id,
+            name: m.name,
+            email: m.email,
+            role: 'MIEMBRO',
+          ),
+        ),
+      ];
+      _participantsByChat[_idSequence] = participants;
+    }
     return chat;
   }
 }

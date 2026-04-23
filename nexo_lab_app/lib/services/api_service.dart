@@ -42,13 +42,11 @@ class ApiService {
       return decoded
           .whereType<Map>()
           .map(
-            (u) => AppUser.fromJson(
-              u.map((k, v) => MapEntry(k.toString(), v)),
-            ),
+            (u) => AppUser.fromJson(u.map((k, v) => MapEntry(k.toString(), v))),
           )
           .toList();
     } catch (_) {
-      return const <AppUser>[];
+      return DemoRepository.searchUsers(q);
     }
   }
 
@@ -97,14 +95,14 @@ class ApiService {
         throw Exception('No hay sesion activa.');
       }
 
-        final response = await _authorizedRequestWithFallback(
+      final response = await _authorizedRequestWithFallback(
         method: 'GET',
         path: '/chats/$chatId/messages',
         token: token,
         queryParameters: (sinceIso == null || sinceIso.isEmpty)
-          ? null
-          : <String, String>{'since': sinceIso},
-        );
+            ? null
+            : <String, String>{'since': sinceIso},
+      );
 
       if (response.statusCode != 200) {
         throw Exception('Error cargando mensajes (${response.statusCode}).');
@@ -129,6 +127,50 @@ class ApiService {
       }
       final since = sinceIso == null ? null : DateTime.tryParse(sinceIso);
       return DemoRepository.messages(chatId, since: since);
+    }
+  }
+
+  Future<List<ChatMessage>> searchMessages({
+    required int chatId,
+    required String query,
+  }) async {
+    final q = query.trim();
+    if (q.length < 2) {
+      return const <ChatMessage>[];
+    }
+
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'GET',
+        path: '/chats/$chatId/messages',
+        token: token,
+        queryParameters: <String, String>{'search': q},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Error buscando mensajes (${response.statusCode}).');
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) {
+        return const <ChatMessage>[];
+      }
+
+      return decoded
+          .whereType<Map>()
+          .map(
+            (m) => ChatMessage.fromJson(
+              m.map((k, v) => MapEntry(k.toString(), v)),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      return DemoRepository.searchMessages(chatId, q);
     }
   }
 
@@ -184,8 +226,9 @@ class ApiService {
     return DemoRepository.createChat(name: name, isGroup: true);
   }
 
-  Future<ChatPreview> createPrivateChat({
-    required AppUser otherUser,
+  Future<ChatPreview> createGroupChat({
+    required String name,
+    required List<int> memberIds,
   }) async {
     try {
       final token = await _authService.getToken();
@@ -198,8 +241,46 @@ class ApiService {
         path: '/chats',
         token: token,
         jsonBody: <String, dynamic>{
-          'otroUsuarioId': otherUser.id,
+          'tipo': 'GRUPAL',
+          'nombre': name,
+          'miembros': memberIds,
         },
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('No se pudo crear el grupo.');
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        throw Exception('Respuesta invalida del servidor.');
+      }
+
+      return ChatPreview.fromJson(
+        decoded.map((k, v) => MapEntry(k.toString(), v)),
+      );
+    } catch (_) {
+      final members = DemoRepository.usersByIds(memberIds);
+      return DemoRepository.createChat(
+        name: name,
+        isGroup: true,
+        members: members,
+      );
+    }
+  }
+
+  Future<ChatPreview> createPrivateChat({required AppUser otherUser}) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'POST',
+        path: '/chats',
+        token: token,
+        jsonBody: <String, dynamic>{'otroUsuarioId': otherUser.id},
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -216,6 +297,175 @@ class ApiService {
       );
     } catch (_) {
       return DemoRepository.createChat(name: otherUser.name, isGroup: false);
+    }
+  }
+
+  Future<List<ChatParticipant>> getParticipants({required int chatId}) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'GET',
+        path: '/chats/$chatId/participantes',
+        token: token,
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('No se pudieron cargar participantes.');
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) {
+        return const <ChatParticipant>[];
+      }
+
+      return decoded
+          .whereType<Map>()
+          .map(
+            (p) => ChatParticipant.fromJson(
+              p.map((k, v) => MapEntry(k.toString(), v)),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      return DemoRepository.participants(chatId);
+    }
+  }
+
+  Future<void> addParticipant({
+    required int chatId,
+    required int userId,
+  }) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'POST',
+        path: '/chats/$chatId/participantes',
+        token: token,
+        jsonBody: <String, dynamic>{'usuarioId': userId},
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('No se pudo agregar miembro.');
+      }
+    } catch (_) {
+      final user = DemoRepository.userById(userId);
+      if (user != null) {
+        DemoRepository.addParticipant(chatId, user);
+      }
+    }
+  }
+
+  Future<void> leaveGroup({required int chatId}) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'DELETE',
+        path: '/chats/$chatId/participantes',
+        token: token,
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('No se pudo abandonar el grupo.');
+      }
+    } catch (_) {
+      DemoRepository.leaveGroup(chatId);
+    }
+  }
+
+  Future<AppUser> updateMyStatus(String status) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'PUT',
+        path: '/usuarios/me/estado',
+        token: token,
+        jsonBody: <String, dynamic>{'tipoEstado': status},
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('No se pudo actualizar el estado.');
+      }
+
+      final current = await _authService.getCurrentUser();
+      if (current == null) {
+        throw Exception('Usuario no disponible.');
+      }
+
+      final updated = AppUser(
+        id: current.id,
+        name: current.name,
+        email: current.email,
+        role: current.role,
+        cargo: current.cargo,
+        sector: current.sector,
+        status: status,
+      );
+      await _authService.saveSession(token: token, user: updated);
+      return updated;
+    } catch (_) {
+      final updated = DemoRepository.updateStatus(status);
+      final token = await _authService.getToken();
+      if (token != null && token.isNotEmpty) {
+        await _authService.saveSession(token: token, user: updated);
+      }
+      return updated;
+    }
+  }
+
+  Future<void> changeMyPassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'PUT',
+        path: '/usuarios/me/password',
+        token: token,
+        jsonBody: <String, dynamic>{
+          'passwordActual': currentPassword,
+          'passwordNueva': newPassword,
+        },
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final body = decodeBody(response.body);
+        throw Exception(
+          body['message']?.toString() ?? 'No se pudo cambiar la contrasena.',
+        );
+      }
+    } catch (e) {
+      final ok = DemoRepository.updatePassword(
+        current: currentPassword,
+        next: newPassword,
+      );
+      if (!ok) {
+        throw Exception(
+          e.toString().contains('Exception:')
+              ? e.toString().replaceFirst('Exception: ', '')
+              : 'La contrasena actual no es correcta.',
+        );
+      }
     }
   }
 
@@ -251,6 +501,21 @@ class ApiService {
                   headers: headers,
                   body: jsonEncode(jsonBody ?? <String, dynamic>{}),
                 )
+                .timeout(const Duration(seconds: 8));
+            break;
+          case 'PUT':
+            headers['Content-Type'] = 'application/json';
+            response = await http
+                .put(
+                  uri,
+                  headers: headers,
+                  body: jsonEncode(jsonBody ?? <String, dynamic>{}),
+                )
+                .timeout(const Duration(seconds: 8));
+            break;
+          case 'DELETE':
+            response = await http
+                .delete(uri, headers: headers)
                 .timeout(const Duration(seconds: 8));
             break;
           default:
