@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../models/chat_models.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/local_notification_service.dart';
 import '../../utils/formatters.dart';
 import '../auth/welcome_page.dart';
 import '../profile/profile_page.dart';
@@ -29,6 +30,7 @@ class _ChatsPageState extends State<ChatsPage> {
   String? _error;
   AppUser? _user;
   Timer? _refreshTimer;
+  Map<int, ChatPreview> _chatSnapshot = <int, ChatPreview>{};
 
   @override
   void initState() {
@@ -49,6 +51,7 @@ class _ChatsPageState extends State<ChatsPage> {
   Future<void> _bootstrap() async {
     _user = await widget.authService.getCurrentUser();
     _isDemoMode = await widget.authService.isDemoSession();
+    await LocalNotificationService.instance.requestPermissions();
     await _loadChats();
   }
 
@@ -65,6 +68,9 @@ class _ChatsPageState extends State<ChatsPage> {
       if (!mounted) {
         return;
       }
+
+      await _notifyIncomingMessages(chats);
+
       setState(() {
         _allChats = chats;
         _error = null;
@@ -86,6 +92,43 @@ class _ChatsPageState extends State<ChatsPage> {
         setState(() {});
       }
     }
+  }
+
+  Future<void> _notifyIncomingMessages(List<ChatPreview> chats) async {
+    final nextSnapshot = <int, ChatPreview>{
+      for (final chat in chats) chat.id: chat,
+    };
+
+    if (_isDemoMode || _chatSnapshot.isEmpty) {
+      _chatSnapshot = nextSnapshot;
+      return;
+    }
+
+    for (final chat in chats) {
+      final previous = _chatSnapshot[chat.id];
+      if (previous == null) {
+        continue;
+      }
+
+      final unreadIncreased = chat.unreadCount > previous.unreadCount;
+      final previousTime =
+          previous.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final currentTime = chat.lastMessageAt;
+      final hasNewerTimestamp =
+          currentTime != null && currentTime.isAfter(previousTime);
+      final textChanged = chat.lastMessage != previous.lastMessage;
+
+      if (unreadIncreased || (hasNewerTimestamp && textChanged)) {
+        await LocalNotificationService.instance.showIncomingMessage(
+          chatId: chat.id,
+          chatName: chat.name,
+          messagePreview: chat.lastMessage,
+          unreadCount: chat.unreadCount,
+        );
+      }
+    }
+
+    _chatSnapshot = nextSnapshot;
   }
 
   Future<void> _logout() async {

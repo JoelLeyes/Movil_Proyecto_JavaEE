@@ -376,7 +376,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       final target = (index * 88.0).clamp(
         0,
         _scrollController.position.maxScrollExtent,
-      );
+      ).toDouble();
       _scrollController.animateTo(
         target,
         duration: const Duration(milliseconds: 300),
