@@ -341,6 +341,19 @@ class DemoRepository {
     return _currentDemoUser;
   }
 
+  static AppUser updateProfile({required String name, required String lastName}) {
+    _currentDemoUser = AppUser(
+      id: _currentDemoUser.id,
+      name: [name.trim(), lastName.trim()].where((part) => part.isNotEmpty).join(' '),
+      email: _currentDemoUser.email,
+      role: _currentDemoUser.role,
+      cargo: _currentDemoUser.cargo,
+      sector: _currentDemoUser.sector,
+      status: _currentDemoUser.status,
+    );
+    return _currentDemoUser;
+  }
+
   static bool updatePassword({required String current, required String next}) {
     if (current != _currentPassword) {
       return false;

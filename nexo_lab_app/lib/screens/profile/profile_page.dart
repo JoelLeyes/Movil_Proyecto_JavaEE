@@ -124,6 +124,126 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _changeName() async {
+    final user = _user;
+    if (user == null) {
+      return;
+    }
+
+    final nameController = TextEditingController(text: user.firstName);
+    final lastNameController = TextEditingController(text: user.lastName);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        bool saving = false;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> submit() async {
+              final name = nameController.text.trim();
+              final lastName = lastNameController.text.trim();
+
+              if (name.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('El nombre no puede estar vacío.')),
+                );
+                return;
+              }
+
+              setModalState(() {
+                saving = true;
+              });
+
+              try {
+                final updated = await _apiService.updateMyProfile(
+                  name: name,
+                  lastName: lastName,
+                );
+                if (!context.mounted) {
+                  return;
+                }
+                Navigator.of(context).pop();
+                if (!mounted) {
+                  return;
+                }
+                setState(() {
+                  _user = updated;
+                });
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(content: Text('Nombre actualizado.')),
+                );
+              } catch (e) {
+                if (!context.mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(e.toString().replaceFirst('Exception: ', '')),
+                  ),
+                );
+              } finally {
+                if (context.mounted) {
+                  setModalState(() {
+                    saving = false;
+                  });
+                }
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Editar nombre'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: lastNameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Apellido',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: saving ? null : submit,
+                  child: saving
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    lastNameController.dispose();
+  }
+
   Future<void> _changePassword() async {
     final currentController = TextEditingController();
     final newController = TextEditingController();
@@ -360,6 +480,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         title: const Text('Estado'),
                         subtitle: Text(_statusLabel(user.status)),
                         onTap: _changeStatus,
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.edit_outlined),
+                        title: const Text('Editar nombre'),
+                        onTap: _changeName,
                       ),
                       const Divider(height: 1),
                       ListTile(

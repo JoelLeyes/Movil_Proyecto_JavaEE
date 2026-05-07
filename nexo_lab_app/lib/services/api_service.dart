@@ -428,6 +428,50 @@ class ApiService {
     }
   }
 
+  Future<AppUser> updateMyProfile({
+    required String name,
+    required String lastName,
+  }) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'PUT',
+        path: '/usuarios/me',
+        token: token,
+        jsonBody: <String, dynamic>{
+          'nombre': name,
+          'apellido': lastName,
+        },
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final body = decodeBody(response.body);
+        throw Exception(
+          body['message']?.toString() ?? 'No se pudo actualizar el perfil.',
+        );
+      }
+
+      final decoded = decodeBody(response.body);
+      final updated = AppUser.fromJson(decoded);
+      await _authService.saveSession(token: token, user: updated);
+      return updated;
+    } catch (_) {
+      final updated = DemoRepository.updateProfile(
+        name: name,
+        lastName: lastName,
+      );
+      final token = await _authService.getToken();
+      if (token != null && token.isNotEmpty) {
+        await _authService.saveSession(token: token, user: updated);
+      }
+      return updated;
+    }
+  }
+
   Future<void> changeMyPassword({
     required String currentPassword,
     required String newPassword,
