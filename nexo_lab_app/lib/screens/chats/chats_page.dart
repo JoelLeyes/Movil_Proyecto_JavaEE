@@ -24,7 +24,6 @@ class _ChatsPageState extends State<ChatsPage> {
   late final ApiService _apiService;
   List<ChatPreview> _allChats = const <ChatPreview>[];
   bool _loading = true;
-  bool _isDemoMode = false;
   String _search = '';
   String _tab = 'all';
   String? _error;
@@ -50,7 +49,6 @@ class _ChatsPageState extends State<ChatsPage> {
 
   Future<void> _bootstrap() async {
     _user = await widget.authService.getCurrentUser();
-    _isDemoMode = await widget.authService.isDemoSession();
     await LocalNotificationService.instance.requestPermissions();
     await _loadChats();
   }
@@ -99,7 +97,7 @@ class _ChatsPageState extends State<ChatsPage> {
       for (final chat in chats) chat.id: chat,
     };
 
-    if (_isDemoMode || _chatSnapshot.isEmpty) {
+    if (_chatSnapshot.isEmpty) {
       _chatSnapshot = nextSnapshot;
       return;
     }
@@ -596,17 +594,6 @@ class _ChatsPageState extends State<ChatsPage> {
       ),
       body: Column(
         children: [
-          if (_isDemoMode)
-            Container(
-              width: double.infinity,
-              color: const Color(0xFFFFF3CD),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: const Text(
-                'Modo demo activo: viendo datos simulados. Cuando el servidor este encendido, inicia sesion de nuevo para usar datos reales.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12),
-              ),
-            ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(

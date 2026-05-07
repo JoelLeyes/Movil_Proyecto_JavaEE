@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 
 import '../models/chat_models.dart';
 import 'auth_service.dart';
-import 'demo_repository.dart';
 
 class ApiService {
   ApiService(this._authService);
@@ -45,8 +44,8 @@ class ApiService {
             (u) => AppUser.fromJson(u.map((k, v) => MapEntry(k.toString(), v))),
           )
           .toList();
-    } catch (_) {
-      return DemoRepository.searchUsers(q);
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -80,8 +79,8 @@ class ApiService {
             ),
           )
           .toList();
-    } catch (_) {
-      return DemoRepository.chats();
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -121,12 +120,8 @@ class ApiService {
             ),
           )
           .toList();
-    } catch (_) {
-      if (!DemoRepository.hasChat(chatId)) {
-        return const <ChatMessage>[];
-      }
-      final since = sinceIso == null ? null : DateTime.tryParse(sinceIso);
-      return DemoRepository.messages(chatId, since: since);
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -169,8 +164,8 @@ class ApiService {
             ),
           )
           .toList();
-    } catch (_) {
-      return DemoRepository.searchMessages(chatId, q);
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -201,17 +196,8 @@ class ApiService {
       if (response.statusCode != 201) {
         throw Exception('Error enviando mensaje (${response.statusCode}).');
       }
-    } catch (_) {
-      final sender =
-          await _authService.getCurrentUser() ??
-          const AppUser(id: 1, name: 'Usuario', email: '', role: 'Usuario');
-      DemoRepository.appendMessage(
-        chatId: chatId,
-        sender: sender,
-        content: content,
-        type: type,
-        attachment: attachment,
-      );
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -219,11 +205,7 @@ class ApiService {
     required String name,
     required bool isGroup,
   }) async {
-    if (!isGroup) {
-      return DemoRepository.createChat(name: name, isGroup: false);
-    }
-
-    return DemoRepository.createChat(name: name, isGroup: true);
+    throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
   }
 
   Future<ChatPreview> createGroupChat({
@@ -259,13 +241,8 @@ class ApiService {
       return ChatPreview.fromJson(
         decoded.map((k, v) => MapEntry(k.toString(), v)),
       );
-    } catch (_) {
-      final members = DemoRepository.usersByIds(memberIds);
-      return DemoRepository.createChat(
-        name: name,
-        isGroup: true,
-        members: members,
-      );
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -295,8 +272,8 @@ class ApiService {
       return ChatPreview.fromJson(
         decoded.map((k, v) => MapEntry(k.toString(), v)),
       );
-    } catch (_) {
-      return DemoRepository.createChat(name: otherUser.name, isGroup: false);
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -330,8 +307,8 @@ class ApiService {
             ),
           )
           .toList();
-    } catch (_) {
-      return DemoRepository.participants(chatId);
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -355,11 +332,8 @@ class ApiService {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception('No se pudo agregar miembro.');
       }
-    } catch (_) {
-      final user = DemoRepository.userById(userId);
-      if (user != null) {
-        DemoRepository.addParticipant(chatId, user);
-      }
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -379,8 +353,8 @@ class ApiService {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception('No se pudo abandonar el grupo.');
       }
-    } catch (_) {
-      DemoRepository.leaveGroup(chatId);
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -418,13 +392,8 @@ class ApiService {
       );
       await _authService.saveSession(token: token, user: updated);
       return updated;
-    } catch (_) {
-      final updated = DemoRepository.updateStatus(status);
-      final token = await _authService.getToken();
-      if (token != null && token.isNotEmpty) {
-        await _authService.saveSession(token: token, user: updated);
-      }
-      return updated;
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -459,16 +428,8 @@ class ApiService {
       final updated = AppUser.fromJson(decoded);
       await _authService.saveSession(token: token, user: updated);
       return updated;
-    } catch (_) {
-      final updated = DemoRepository.updateProfile(
-        name: name,
-        lastName: lastName,
-      );
-      final token = await _authService.getToken();
-      if (token != null && token.isNotEmpty) {
-        await _authService.saveSession(token: token, user: updated);
-      }
-      return updated;
+    } catch (e) {
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 
@@ -499,17 +460,7 @@ class ApiService {
         );
       }
     } catch (e) {
-      final ok = DemoRepository.updatePassword(
-        current: currentPassword,
-        next: newPassword,
-      );
-      if (!ok) {
-        throw Exception(
-          e.toString().contains('Exception:')
-              ? e.toString().replaceFirst('Exception: ', '')
-              : 'La contrasena actual no es correcta.',
-        );
-      }
+      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
     }
   }
 

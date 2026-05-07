@@ -4,7 +4,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/chat_models.dart';
-import 'demo_repository.dart';
 
 class ApiConfig {
   static const String baseUrl = String.fromEnvironment(
@@ -39,7 +38,6 @@ class AuthService {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _tokenKey = 'jwt_token';
   static const String _userKey = 'current_user';
-  static const String demoToken = 'demo-token';
 
   Future<bool> hasToken() async {
     final token = await _storage.read(key: _tokenKey);
@@ -48,10 +46,7 @@ class AuthService {
 
   Future<String?> getToken() => _storage.read(key: _tokenKey);
 
-  Future<bool> isDemoSession() async {
-    final token = await getToken();
-    return token == demoToken;
-  }
+
 
   Future<AppUser?> getCurrentUser() async {
     final raw = await _storage.read(key: _userKey);
@@ -114,13 +109,7 @@ class AuthService {
           error.contains('failed host lookup') ||
           error.contains('no se pudo conectar');
 
-      if (!isConnectionIssue) {
-        rethrow;
-      }
-
-      final demoUser = DemoRepository.demoUserFromEmail(email);
-      await saveSession(token: demoToken, user: demoUser);
-      return demoUser;
+      rethrow;
     }
   }
 
