@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -47,7 +48,6 @@ class AuthService {
   Future<String?> getToken() => _storage.read(key: _tokenKey);
 
 
-
   Future<AppUser?> getCurrentUser() async {
     final raw = await _storage.read(key: _userKey);
     if (raw == null || raw.isEmpty) {
@@ -66,6 +66,38 @@ class AuthService {
   }) async {
     await _storage.write(key: _tokenKey, value: token);
     await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
+  }
+
+  Future<void> syncDevicePushToken() async {
+    final token = await getToken();
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    try {
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      final pushToken = await FirebaseMessaging.instance.getToken();
+      if (pushToken == null || pushToken.isEmpty) {
+        return;
+      }
+
+      final response = await _authorizedPutJsonWithApiFallback(
+        '/usuarios/me/push-token',
+        <String, dynamic>{'pushToken': pushToken},
+        token,
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('No se pudo registrar el token push.');
+      }
+    } catch (_) {
+      return;
+    }
   }
 
   Future<void> logout() async {
@@ -100,6 +132,7 @@ class AuthService {
         rawUser.map((k, v) => MapEntry(k.toString(), v)),
       );
       await saveSession(token: token, user: user);
+      await syncDevicePushToken();
       return user;
     } catch (e) {
       final error = e.toString().toLowerCase();
@@ -184,6 +217,49 @@ class AuthService {
           lastNotFound = response;
           continue;
         }
+        return response;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    if (lastNotFound != null) {
+      return lastNotFound;
+    }
+
+    if (lastError != null) {
+      throw Exception(lastError.toString());
+    }
+
+    throw Exception('No se pudo conectar con el backend.');
+  }
+
+  Future<http.Response> _authorizedPutJsonWithApiFallback(
+    String path,
+    Map<String, dynamic> payload,
+    String token,
+  ) async {
+    Object? lastError;
+    http.Response? lastNotFound;
+
+    for (final uri in buildEndpointCandidates(path)) {
+      try {
+        final response = await http
+            .put(
+              uri,
+              headers: <String, String>{
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 404) {
+          lastNotFound = response;
+          continue;
+        }
+
         return response;
       } catch (e) {
         lastError = e;

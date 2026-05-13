@@ -35,6 +35,13 @@ class _BootstrapPageState extends State<BootstrapPage> {
   void initState() {
     super.initState();
     _hasTokenFuture = _authService.hasToken();
+    _syncPushTokenIfNeeded();
+  }
+
+  Future<void> _syncPushTokenIfNeeded() async {
+    if (await _authService.hasToken()) {
+      await _authService.syncDevicePushToken();
+    }
   }
 
   @override
