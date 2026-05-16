@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class LocalNotificationService {
@@ -88,5 +89,33 @@ class LocalNotificationService {
       details,
       payload: 'chat:$chatId',
     );
+  }
+
+  /// Procesa notificaciones remotas de Firebase Messaging
+  Future<void> handleRemoteMessage(RemoteMessage message) async {
+    try {
+      final notification = message.notification;
+      final data = message.data;
+
+      if (notification == null) {
+        return;
+      }
+
+      final chatId = int.tryParse(data['chatId'] ?? '0') ?? 0;
+      final chatName = data['chatName'] ?? 'NexoLab';
+      final messagePreview = notification.body ?? '';
+      final unreadCount = int.tryParse(data['unreadCount'] ?? '1') ?? 1;
+
+      if (chatId > 0) {
+        await showIncomingMessage(
+          chatId: chatId,
+          chatName: chatName,
+          messagePreview: messagePreview,
+          unreadCount: unreadCount,
+        );
+      }
+    } catch (e) {
+      print('Error al procesar notificación remota: $e');
+    }
   }
 }
