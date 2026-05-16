@@ -31,6 +31,22 @@ class FirebaseMessagingService {
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       _handleMessageOpenedApp(message);
     });
+
+    // Obtener y mostrar el token de registro (útil para pruebas)
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      // ignore: avoid_print
+      print('FCM token: $token');
+    } catch (e) {
+      // ignore: avoid_print
+      print('No se pudo obtener FCM token: $e');
+    }
+
+    // Escuchar cambios de token
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      // ignore: avoid_print
+      print('FCM token refrescado: $newToken');
+    });
   }
 
   /// Maneja notificaciones cuando la app está en primer plano
