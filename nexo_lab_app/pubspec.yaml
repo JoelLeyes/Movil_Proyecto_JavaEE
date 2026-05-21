@@ -1,4 +1,4 @@
-name: nexo_lab_app
+  name: nexo_lab_app
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -36,9 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   flutter_secure_storage: ^10.0.0
-  firebase_core: ^3.15.0
-  firebase_messaging: ^15.2.0
-  flutter_local_notifications: ^19.4.2
+  # Firebase and local notifications removed
 
 dev_dependencies:
   flutter_test:

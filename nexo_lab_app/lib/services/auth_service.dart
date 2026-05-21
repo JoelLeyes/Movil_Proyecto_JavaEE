@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -16,12 +15,51 @@ class ApiConfig {
     final normalized = _normalizeBaseUrl(baseUrl);
     final hasApiSuffix = normalized.toLowerCase().endsWith('/api');
 
-    if (hasApiSuffix) {
-      final legacy = normalized.substring(0, normalized.length - 4);
-      return <String>{normalized, _normalizeBaseUrl(legacy)}.toList();
+    // Build a set of candidates including common variants:
+    // - original (normalized)
+    // - with/without trailing /api
+    // - https variant
+    // - explicit :8080 variant (common for Tomcat)
+    final candidates = <String>{};
+
+    String addIfNotEmpty(String? s) {
+      if (s == null) return '';
+      final t = s.trim();
+      if (t.isEmpty) return '';
+      candidates.add(_normalizeBaseUrl(t));
+      return t;
     }
 
-    return <String>{normalized, '$normalized/api'}.toList();
+    addIfNotEmpty(normalized);
+    if (hasApiSuffix) {
+      final legacy = normalized.substring(0, normalized.length - 4);
+      addIfNotEmpty(legacy);
+    } else {
+      addIfNotEmpty('$normalized/api');
+    }
+
+    // Parse to produce scheme / port variants
+    try {
+      final uri = Uri.parse(normalized);
+      final scheme = (uri.scheme.isEmpty ? 'http' : uri.scheme);
+      final host = uri.host;
+      final path = uri.path.isEmpty ? '' : uri.path;
+
+      if (host.isNotEmpty) {
+        // https variant
+        candidates.add('https://$host$path');
+
+        // explicit :8080 variants when no port was present
+        if (!uri.hasPort) {
+          candidates.add('$scheme://$host:8080$path');
+          candidates.add('https://$host:8080$path');
+        }
+      }
+    } catch (_) {
+      // ignore parse errors — fallback to string variants already added
+    }
+
+    return candidates.toList();
   }
 
   static String _normalizeBaseUrl(String value) {
@@ -69,35 +107,8 @@ class AuthService {
   }
 
   Future<void> syncDevicePushToken() async {
-    final token = await getToken();
-    if (token == null || token.isEmpty) {
-      return;
-    }
-
-    try {
-      await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-
-      final pushToken = await FirebaseMessaging.instance.getToken();
-      if (pushToken == null || pushToken.isEmpty) {
-        return;
-      }
-
-      final response = await _authorizedPutJsonWithApiFallback(
-        '/usuarios/me/push-token',
-        <String, dynamic>{'pushToken': pushToken},
-        token,
-      );
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('No se pudo registrar el token push.');
-      }
-    } catch (_) {
-      return;
-    }
+    // Notificaciones removidas — función no implementada.
+    return;
   }
 
   Future<void> logout() async {
@@ -132,7 +143,6 @@ class AuthService {
         rawUser.map((k, v) => MapEntry(k.toString(), v)),
       );
       await saveSession(token: token, user: user);
-      await syncDevicePushToken();
       return user;
     } catch (e) {
       final error = e.toString().toLowerCase();
@@ -211,7 +221,7 @@ class AuthService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(payload),
             )
-            .timeout(const Duration(seconds: 8));
+            .timeout(const Duration(seconds: 12));
 
         if (response.statusCode == 404) {
           lastNotFound = response;
@@ -253,7 +263,7 @@ class AuthService {
               },
               body: jsonEncode(payload),
             )
-            .timeout(const Duration(seconds: 8));
+            .timeout(const Duration(seconds: 12));
 
         if (response.statusCode == 404) {
           lastNotFound = response;

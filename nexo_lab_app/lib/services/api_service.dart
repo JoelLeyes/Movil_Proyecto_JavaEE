@@ -485,8 +485,8 @@ class ApiService {
         switch (method.toUpperCase()) {
           case 'GET':
             response = await http
-                .get(uri, headers: headers)
-                .timeout(const Duration(seconds: 8));
+              .get(uri, headers: headers)
+              .timeout(const Duration(seconds: 12));
             break;
           case 'POST':
             headers['Content-Type'] = 'application/json';
@@ -496,7 +496,7 @@ class ApiService {
                   headers: headers,
                   body: jsonEncode(jsonBody ?? <String, dynamic>{}),
                 )
-                .timeout(const Duration(seconds: 8));
+                .timeout(const Duration(seconds: 12));
             break;
           case 'PUT':
             headers['Content-Type'] = 'application/json';
@@ -506,12 +506,12 @@ class ApiService {
                   headers: headers,
                   body: jsonEncode(jsonBody ?? <String, dynamic>{}),
                 )
-                .timeout(const Duration(seconds: 8));
+                .timeout(const Duration(seconds: 12));
             break;
           case 'DELETE':
             response = await http
-                .delete(uri, headers: headers)
-                .timeout(const Duration(seconds: 8));
+              .delete(uri, headers: headers)
+              .timeout(const Duration(seconds: 12));
             break;
           default:
             throw Exception('Metodo HTTP no soportado: $method');

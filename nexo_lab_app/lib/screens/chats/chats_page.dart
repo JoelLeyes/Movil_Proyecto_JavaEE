@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../models/chat_models.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
-import '../../services/local_notification_service.dart';
 import '../../utils/formatters.dart';
 import '../auth/welcome_page.dart';
 import '../profile/profile_page.dart';
@@ -49,7 +48,6 @@ class _ChatsPageState extends State<ChatsPage> {
 
   Future<void> _bootstrap() async {
     _user = await widget.authService.getCurrentUser();
-    await LocalNotificationService.instance.requestPermissions();
     await _loadChats();
   }
 
@@ -116,13 +114,10 @@ class _ChatsPageState extends State<ChatsPage> {
           currentTime != null && currentTime.isAfter(previousTime);
       final textChanged = chat.lastMessage != previous.lastMessage;
 
+      // Notificaciones deshabilitadas — no mostrar notificaciones locales.
       if (unreadIncreased || (hasNewerTimestamp && textChanged)) {
-        await LocalNotificationService.instance.showIncomingMessage(
-          chatId: chat.id,
-          chatName: chat.name,
-          messagePreview: chat.lastMessage,
-          unreadCount: chat.unreadCount,
-        );
+        // Se detectó nuevo mensaje, pero la funcionalidad de notificaciones
+        // ha sido deshabilitada temporalmente.
       }
     }
 
