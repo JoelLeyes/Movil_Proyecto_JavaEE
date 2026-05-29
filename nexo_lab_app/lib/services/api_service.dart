@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -9,6 +10,17 @@ class ApiService {
   ApiService(this._authService);
 
   final AuthService _authService;
+  static const Duration _requestTimeout = Duration(seconds: 25);
+
+  Exception _asApiException(Object error) {
+    final raw = error.toString().replaceFirst('Exception: ', '').trim();
+    if (raw.isEmpty) {
+      return Exception(
+        'Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.',
+      );
+    }
+    return Exception(raw);
+  }
 
   Future<List<AppUser>> searchUsers(String query) async {
     final q = query.trim();
@@ -45,7 +57,7 @@ class ApiService {
           )
           .toList();
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -80,7 +92,7 @@ class ApiService {
           )
           .toList();
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -121,7 +133,7 @@ class ApiService {
           )
           .toList();
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -165,7 +177,7 @@ class ApiService {
           )
           .toList();
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -185,19 +197,27 @@ class ApiService {
         method: 'POST',
         path: '/chats/$chatId/messages',
         token: token,
-        jsonBody: <String, dynamic>{
-          'contenido': content,
-          'content': content,
-          'type': type,
-          if (attachment != null) 'attachment': attachment.toJson(),
-        },
+        // El servidor espera campo de formulario 'contenido' (o multipart cuando hay archivos).
+        formFields: attachment == null
+            ? <String, String>{
+                'contenido': content,
+              }
+            : null,
+        jsonBody: attachment != null
+            ? <String, dynamic>{
+                'contenido': content,
+                'content': content,
+                'type': type,
+                'attachment': attachment.toJson(),
+              }
+            : null,
       );
 
       if (response.statusCode != 201) {
         throw Exception('Error enviando mensaje (${response.statusCode}).');
       }
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -242,7 +262,7 @@ class ApiService {
         decoded.map((k, v) => MapEntry(k.toString(), v)),
       );
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -273,7 +293,7 @@ class ApiService {
         decoded.map((k, v) => MapEntry(k.toString(), v)),
       );
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -308,7 +328,7 @@ class ApiService {
           )
           .toList();
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -333,7 +353,7 @@ class ApiService {
         throw Exception('No se pudo agregar miembro.');
       }
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -354,7 +374,7 @@ class ApiService {
         throw Exception('No se pudo abandonar el grupo.');
       }
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -393,7 +413,7 @@ class ApiService {
       await _authService.saveSession(token: token, user: updated);
       return updated;
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -429,7 +449,7 @@ class ApiService {
       await _authService.saveSession(token: token, user: updated);
       return updated;
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -460,7 +480,7 @@ class ApiService {
         );
       }
     } catch (e) {
-      throw Exception('Conexión perdida. Revise su conexión o vuelva a intentarlo más tarde.');
+      throw _asApiException(e);
     }
   }
 
@@ -470,6 +490,7 @@ class ApiService {
     required String token,
     Map<String, String>? queryParameters,
     Map<String, dynamic>? jsonBody,
+    Map<String, String>? formFields,
   }) async {
     Object? lastError;
     http.Response? lastNotFound;
@@ -486,17 +507,28 @@ class ApiService {
           case 'GET':
             response = await http
               .get(uri, headers: headers)
-              .timeout(const Duration(seconds: 12));
+              .timeout(_requestTimeout);
             break;
           case 'POST':
-            headers['Content-Type'] = 'application/json';
-            response = await http
-                .post(
-                  uri,
-                  headers: headers,
-                  body: jsonEncode(jsonBody ?? <String, dynamic>{}),
-                )
-                .timeout(const Duration(seconds: 12));
+            if (formFields != null) {
+              headers['Content-Type'] = 'application/x-www-form-urlencoded';
+              response = await http
+                  .post(
+                    uri,
+                    headers: headers,
+                    body: Uri(queryParameters: formFields).query,
+                  )
+                  .timeout(_requestTimeout);
+            } else {
+              headers['Content-Type'] = 'application/json';
+              response = await http
+                  .post(
+                    uri,
+                    headers: headers,
+                    body: jsonEncode(jsonBody ?? <String, dynamic>{}),
+                  )
+                  .timeout(_requestTimeout);
+            }
             break;
           case 'PUT':
             headers['Content-Type'] = 'application/json';
@@ -506,12 +538,12 @@ class ApiService {
                   headers: headers,
                   body: jsonEncode(jsonBody ?? <String, dynamic>{}),
                 )
-                .timeout(const Duration(seconds: 12));
+                .timeout(_requestTimeout);
             break;
           case 'DELETE':
             response = await http
               .delete(uri, headers: headers)
-              .timeout(const Duration(seconds: 12));
+              .timeout(_requestTimeout);
             break;
           default:
             throw Exception('Metodo HTTP no soportado: $method');
@@ -523,6 +555,10 @@ class ApiService {
         }
 
         return response;
+      } on TimeoutException {
+        lastError = Exception(
+          'Timeout al conectar con $uri. El servidor tardó más de ${_requestTimeout.inSeconds}s en responder.',
+        );
       } catch (e) {
         lastError = e;
       }

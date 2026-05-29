@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -8,55 +9,20 @@ import '../models/chat_models.dart';
 class ApiConfig {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://nexolab.cloud-ip.cc/api',
+    defaultValue: 'https://nexolab.cloud-ip.cc/api',
   );
 
   static List<String> candidateBaseUrls() {
     final normalized = _normalizeBaseUrl(baseUrl);
     final hasApiSuffix = normalized.toLowerCase().endsWith('/api');
-
-    // Build a set of candidates including common variants:
-    // - original (normalized)
-    // - with/without trailing /api
-    // - https variant
-    // - explicit :8080 variant (common for Tomcat)
     final candidates = <String>{};
 
-    String addIfNotEmpty(String? s) {
-      if (s == null) return '';
-      final t = s.trim();
-      if (t.isEmpty) return '';
-      candidates.add(_normalizeBaseUrl(t));
-      return t;
-    }
-
-    addIfNotEmpty(normalized);
+    // Prefer a single, explicit API base URL.
     if (hasApiSuffix) {
-      final legacy = normalized.substring(0, normalized.length - 4);
-      addIfNotEmpty(legacy);
+      candidates.add(normalized);
     } else {
-      addIfNotEmpty('$normalized/api');
-    }
-
-    // Parse to produce scheme / port variants
-    try {
-      final uri = Uri.parse(normalized);
-      final scheme = (uri.scheme.isEmpty ? 'http' : uri.scheme);
-      final host = uri.host;
-      final path = uri.path.isEmpty ? '' : uri.path;
-
-      if (host.isNotEmpty) {
-        // https variant
-        candidates.add('https://$host$path');
-
-        // explicit :8080 variants when no port was present
-        if (!uri.hasPort) {
-          candidates.add('$scheme://$host:8080$path');
-          candidates.add('https://$host:8080$path');
-        }
-      }
-    } catch (_) {
-      // ignore parse errors — fallback to string variants already added
+      candidates.add('$normalized/api');
+      candidates.add(normalized);
     }
 
     return candidates.toList();
@@ -65,7 +31,7 @@ class ApiConfig {
   static String _normalizeBaseUrl(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) {
-      return 'http://nexolab.cloud-ip.cc/api';
+      return 'https://nexolab.cloud-ip.cc/api';
     }
     return trimmed.endsWith('/')
         ? trimmed.substring(0, trimmed.length - 1)
@@ -77,6 +43,7 @@ class AuthService {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _tokenKey = 'jwt_token';
   static const String _userKey = 'current_user';
+  static const Duration _requestTimeout = Duration(seconds: 25);
 
   Future<bool> hasToken() async {
     final token = await _storage.read(key: _tokenKey);
@@ -221,13 +188,17 @@ class AuthService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(payload),
             )
-            .timeout(const Duration(seconds: 12));
+            .timeout(_requestTimeout);
 
         if (response.statusCode == 404) {
           lastNotFound = response;
           continue;
         }
         return response;
+      } on TimeoutException {
+        lastError = Exception(
+          'Timeout al conectar con $uri. El servidor tardó más de ${_requestTimeout.inSeconds}s en responder.',
+        );
       } catch (e) {
         lastError = e;
       }
@@ -263,7 +234,7 @@ class AuthService {
               },
               body: jsonEncode(payload),
             )
-            .timeout(const Duration(seconds: 12));
+            .timeout(_requestTimeout);
 
         if (response.statusCode == 404) {
           lastNotFound = response;
@@ -271,6 +242,10 @@ class AuthService {
         }
 
         return response;
+      } on TimeoutException {
+        lastError = Exception(
+          'Timeout al conectar con $uri. El servidor tardó más de ${_requestTimeout.inSeconds}s en responder.',
+        );
       } catch (e) {
         lastError = e;
       }

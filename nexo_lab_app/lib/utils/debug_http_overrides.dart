@@ -1,0 +1,2 @@
+export 'debug_http_overrides_stub.dart'
+    if (dart.library.io) 'debug_http_overrides_io.dart';

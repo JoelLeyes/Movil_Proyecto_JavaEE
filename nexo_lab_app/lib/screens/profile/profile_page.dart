@@ -79,7 +79,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (_) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -90,7 +90,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     trailing: _user?.status == status['value']
                         ? const Icon(Icons.check, color: Colors.green)
                         : null,
-                    onTap: () => Navigator.of(context).pop(status['value']),
+                    onTap: () => Navigator.of(sheetContext).pop(status['value']),
                   ),
                 )
                 .toList(),

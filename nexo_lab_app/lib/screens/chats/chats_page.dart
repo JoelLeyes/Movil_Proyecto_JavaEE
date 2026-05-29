@@ -141,7 +141,7 @@ class _ChatsPageState extends State<ChatsPage> {
     final value = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (_) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -149,12 +149,12 @@ class _ChatsPageState extends State<ChatsPage> {
               ListTile(
                 leading: const Icon(Icons.person_add_alt_1),
                 title: const Text('Nueva conversacion privada'),
-                onTap: () => Navigator.of(context).pop('private'),
+                onTap: () => Navigator.of(sheetContext).pop('private'),
               ),
               ListTile(
                 leading: const Icon(Icons.group_add),
                 title: const Text('Nuevo grupo'),
-                onTap: () => Navigator.of(context).pop('group'),
+                onTap: () => Navigator.of(sheetContext).pop('group'),
               ),
               const SizedBox(height: 8),
             ],
