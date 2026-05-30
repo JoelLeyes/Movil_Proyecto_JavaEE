@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../models/chat_models.dart';
 import 'auth_service.dart';
@@ -186,6 +186,62 @@ class ApiService {
     required String content,
     String type = 'TEXT',
     ChatAttachment? attachment,
+    List<UploadFilePayload> attachmentFiles = const <UploadFilePayload>[],
+    String? replyToMessageId,
+  }) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = attachmentFiles.isNotEmpty
+          ? await _authorizedMultipartRequestWithFallback(
+              method: 'POST',
+              path: '/chats/$chatId/messages',
+              token: token,
+              fields: <String, String>{
+                'contenido': content,
+                if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+                  'respondaId': replyToMessageId,
+              },
+              files: attachmentFiles,
+            )
+          : await _authorizedRequestWithFallback(
+              method: 'POST',
+              path: '/chats/$chatId/messages',
+              token: token,
+              formFields: attachment == null
+                  ? <String, String>{
+                      'contenido': content,
+                      if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+                        'respondaId': replyToMessageId,
+                    }
+                  : null,
+              jsonBody: attachment != null
+                  ? <String, dynamic>{
+                      'contenido': content,
+                      'content': content,
+                      'type': type,
+                      'attachment': attachment.toJson(),
+                      if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+                        'respondaId': replyToMessageId,
+                    }
+                  : null,
+            );
+
+      if (response.statusCode != 201) {
+        throw Exception('Error enviando mensaje (${response.statusCode}).');
+      }
+    } catch (e) {
+      throw _asApiException(e);
+    }
+  }
+
+  Future<void> reactToMessage({
+    required int chatId,
+    required String messageId,
+    required String emoji,
   }) async {
     try {
       final token = await _authService.getToken();
@@ -195,26 +251,44 @@ class ApiService {
 
       final response = await _authorizedRequestWithFallback(
         method: 'POST',
-        path: '/chats/$chatId/messages',
+        path: '/chats/$chatId/reacciones',
         token: token,
-        // El servidor espera campo de formulario 'contenido' (o multipart cuando hay archivos).
-        formFields: attachment == null
-            ? <String, String>{
-                'contenido': content,
-              }
-            : null,
-        jsonBody: attachment != null
-            ? <String, dynamic>{
-                'contenido': content,
-                'content': content,
-                'type': type,
-                'attachment': attachment.toJson(),
-              }
-            : null,
+        jsonBody: <String, dynamic>{
+          'msgId': messageId,
+          'emoji': emoji,
+        },
       );
 
-      if (response.statusCode != 201) {
-        throw Exception('Error enviando mensaje (${response.statusCode}).');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('No se pudo registrar la reaccion.');
+      }
+    } catch (e) {
+      throw _asApiException(e);
+    }
+  }
+
+  Future<void> renameGroupChat({
+    required int chatId,
+    required String name,
+  }) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedRequestWithFallback(
+        method: 'PUT',
+        path: '/chats/$chatId/nombre',
+        token: token,
+        jsonBody: <String, dynamic>{'nombre': name},
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final body = decodeBody(response.body);
+        throw Exception(
+          body['message']?.toString() ?? 'No se pudo renombrar el grupo.',
+        );
       }
     } catch (e) {
       throw _asApiException(e);
@@ -453,6 +527,44 @@ class ApiService {
     }
   }
 
+  Future<AppUser> uploadMyPhoto({
+    required UploadFilePayload photo,
+  }) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedMultipartRequestWithFallback(
+        method: 'POST',
+        path: '/usuarios/me/foto',
+        token: token,
+        fields: const <String, String>{},
+        files: <UploadFilePayload>[photo],
+        fileFieldName: 'foto',
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final body = decodeBody(response.body);
+        throw Exception(
+          body['message']?.toString() ?? 'No se pudo actualizar la foto.',
+        );
+      }
+
+      final decoded = decodeBody(response.body);
+      final updated = AppUser.fromJson(decoded);
+      final tokenAfter = await _authService.getToken();
+      if (tokenAfter == null || tokenAfter.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+      await _authService.saveSession(token: tokenAfter, user: updated);
+      return updated;
+    } catch (e) {
+      throw _asApiException(e);
+    }
+  }
+
   Future<void> changeMyPassword({
     required String currentPassword,
     required String newPassword,
@@ -573,5 +685,89 @@ class ApiService {
     }
 
     throw Exception('No se pudo conectar con el backend.');
+  }
+
+  Future<http.Response> _authorizedMultipartRequestWithFallback({
+    required String method,
+    required String path,
+    required String token,
+    Map<String, String>? fields,
+    List<UploadFilePayload> files = const <UploadFilePayload>[],
+    String fileFieldName = 'archivo',
+  }) async {
+    Object? lastError;
+    http.Response? lastNotFound;
+
+    for (final uri in buildEndpointCandidates(path)) {
+      try {
+        final request = http.MultipartRequest(method.toUpperCase(), uri)
+          ..headers['Authorization'] = 'Bearer $token';
+
+        fields?.forEach((key, value) {
+          request.fields[key] = value;
+        });
+
+        for (final file in files) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              fileFieldName,
+              file.bytes,
+              filename: file.fileName,
+              contentType: _mediaTypeForFile(file.fileName, file.mimeType),
+            ),
+          );
+        }
+
+        final streamed = await request.send().timeout(_requestTimeout);
+        final response = await http.Response.fromStream(streamed);
+
+        if (response.statusCode == 404) {
+          lastNotFound = response;
+          continue;
+        }
+
+        return response;
+      } on TimeoutException {
+        lastError = Exception(
+          'Timeout al conectar con $uri. El servidor tardó más de ${_requestTimeout.inSeconds}s en responder.',
+        );
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    if (lastNotFound != null) {
+      return lastNotFound;
+    }
+
+    if (lastError != null) {
+      throw Exception(lastError.toString());
+    }
+
+    throw Exception('No se pudo conectar con el backend.');
+  }
+
+  MediaType _mediaTypeForFile(String fileName, String? mimeType) {
+    if (mimeType != null && mimeType.contains('/')) {
+      final parts = mimeType.split('/');
+      if (parts.length == 2) {
+        return MediaType(parts[0], parts[1]);
+      }
+    }
+
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return MediaType('image', 'jpeg');
+    }
+    if (lower.endsWith('.png')) {
+      return MediaType('image', 'png');
+    }
+    if (lower.endsWith('.gif')) {
+      return MediaType('image', 'gif');
+    }
+    if (lower.endsWith('.pdf')) {
+      return MediaType('application', 'pdf');
+    }
+    return MediaType('application', 'octet-stream');
   }
 }

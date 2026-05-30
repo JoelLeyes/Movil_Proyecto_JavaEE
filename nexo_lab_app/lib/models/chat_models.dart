@@ -7,6 +7,7 @@ class AppUser {
     this.cargo,
     this.sector,
     this.status,
+    this.fotoPerfilUrl,
   });
 
   final int id;
@@ -16,6 +17,7 @@ class AppUser {
   final String? cargo;
   final String? sector;
   final String? status;
+  final String? fotoPerfilUrl;
 
   String get initials {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -40,6 +42,7 @@ class AppUser {
     'cargo': cargo,
     'sector': sector,
     'tipoEstado': status,
+    'fotoPerfilUrl': fotoPerfilUrl,
   };
 
   String get firstName {
@@ -80,6 +83,49 @@ class AppUser {
           json['tipoEstado']?.toString() ??
           json['estado']?.toString() ??
           json['status']?.toString(),
+      fotoPerfilUrl: json['fotoPerfilUrl']?.toString(),
+    );
+  }
+}
+
+class UploadFilePayload {
+  const UploadFilePayload({
+    required this.fileName,
+    required this.bytes,
+    this.mimeType,
+  });
+
+  final String fileName;
+  final List<int> bytes;
+  final String? mimeType;
+}
+
+class ChatReplyPreview {
+  const ChatReplyPreview({required this.id, required this.content});
+
+  final String id;
+  final String content;
+
+  factory ChatReplyPreview.fromJson(Map<String, dynamic> json) {
+    return ChatReplyPreview(
+      id: (json['idMensaje'] ?? json['id'] ?? '').toString(),
+      content: json['contenido']?.toString() ?? json['content']?.toString() ?? '',
+    );
+  }
+}
+
+class ChatReaction {
+  const ChatReaction({required this.emoji, required this.count, required this.mine});
+
+  final String emoji;
+  final int count;
+  final bool mine;
+
+  factory ChatReaction.fromJson(Map<String, dynamic> json) {
+    return ChatReaction(
+      emoji: json['emoji']?.toString() ?? '👍',
+      count: toIntValue(json['count']) ?? 0,
+      mine: toBoolValue(json['mine']) ?? false,
     );
   }
 }
@@ -219,6 +265,8 @@ class ChatMessage {
     required this.content,
     required this.type,
     this.attachment,
+    this.replyTo,
+    this.reactions = const <ChatReaction>[],
     required this.timestamp,
     required this.read,
   });
@@ -229,6 +277,8 @@ class ChatMessage {
   final String content;
   final String type;
   final ChatAttachment? attachment;
+  final ChatReplyPreview? replyTo;
+  final List<ChatReaction> reactions;
   final DateTime timestamp;
   final bool read;
 
@@ -246,6 +296,8 @@ class ChatMessage {
         ? rawAttachments.first
         : null;
     final rawAttachment = json['attachment'] ?? json['file'] ?? firstAttachment;
+    final rawReply = json['respondeA'];
+    final rawReactions = json['reacciones'];
 
     final rawStates = json['estados'];
     Map<String, dynamic>? senderFromState;
@@ -303,6 +355,21 @@ class ChatMessage {
               rawAttachment.map((k, v) => MapEntry(k.toString(), v)),
             )
           : null,
+      replyTo: rawReply is Map
+          ? ChatReplyPreview.fromJson(
+              rawReply.map((k, v) => MapEntry(k.toString(), v)),
+            )
+          : null,
+      reactions: rawReactions is List
+          ? rawReactions
+              .whereType<Map>()
+              .map(
+                (reaction) => ChatReaction.fromJson(
+                  reaction.map((k, v) => MapEntry(k.toString(), v)),
+                ),
+              )
+              .toList()
+          : const <ChatReaction>[],
       timestamp: DateTime.tryParse(rawTimestamp ?? '') ?? DateTime.now(),
       read: toBoolValue(json['read']) ?? toBoolValue(json['isRead']) ?? false,
     );

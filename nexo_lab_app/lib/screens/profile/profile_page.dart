@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/chat_models.dart';
@@ -259,18 +262,20 @@ class _ProfilePageState extends State<ProfilePage> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             Future<void> submit() async {
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(this.context);
               final current = currentController.text;
               final next = newController.text;
               final confirm = confirmController.text;
 
               if (current.isEmpty || next.isEmpty || confirm.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(content: Text('Completa todos los campos.')),
                 );
                 return;
               }
               if (next != confirm) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(
                     content: Text('Las contrasenas no coinciden.'),
                   ),
@@ -281,7 +286,7 @@ class _ProfilePageState extends State<ProfilePage> {
               final hasNumber = next.contains(RegExp(r'[0-9]'));
               final hasSpecial = next.contains(RegExp(r'[^A-Za-z0-9]'));
               if (next.length < 8 || !hasUpper || !hasNumber || !hasSpecial) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(
                     content: Text('Minimo 8, mayuscula, numero y especial.'),
                   ),
@@ -297,15 +302,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 if (!context.mounted) {
                   return;
                 }
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(this.context).showSnackBar(
+                navigator.pop();
+                messenger.showSnackBar(
                   const SnackBar(content: Text('Contrasena actualizada.')),
                 );
               } catch (e) {
                 if (!context.mounted) {
                   return;
                 }
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text(e.toString().replaceFirst('Exception: ', '')),
                   ),
@@ -396,6 +401,88 @@ class _ProfilePageState extends State<ProfilePage> {
     confirmController.dispose();
   }
 
+  Future<void> _changePhoto() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+
+    final file = result.files.first;
+    if (file.bytes == null || file.bytes!.isEmpty) {
+      return;
+    }
+
+    try {
+      final updated = await _apiService.uploadMyPhoto(
+        photo: UploadFilePayload(
+          fileName: file.name,
+          bytes: file.bytes!,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _user = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto actualizada.')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  Widget _buildAvatar(AppUser user) {
+    final url = user.fotoPerfilUrl;
+    final initials = user.initials;
+
+    if (url == null || url.isEmpty) {
+      return CircleAvatar(
+        radius: 38,
+        backgroundColor: const Color(0xFF0C447C),
+        child: Text(
+          initials,
+          style: const TextStyle(color: Colors.white, fontSize: 22),
+        ),
+      );
+    }
+
+    if (url.startsWith('data:')) {
+      final commaIndex = url.indexOf(',');
+      if (commaIndex > 0) {
+        final raw = url.substring(commaIndex + 1);
+        try {
+          return CircleAvatar(
+            radius: 38,
+            backgroundImage: MemoryImage(base64Decode(raw)),
+          );
+        } catch (_) {
+          // Fallback a iniciales.
+        }
+      }
+    }
+
+    return CircleAvatar(
+      radius: 38,
+      backgroundColor: const Color(0xFF0C447C),
+      child: Text(
+        initials,
+        style: const TextStyle(color: Colors.white, fontSize: 22),
+      ),
+    );
+  }
+
   String _statusLabel(String? value) {
     final found = _statuses.where((s) => s['value'] == value).toList();
     if (found.isEmpty) {
@@ -414,43 +501,59 @@ class _ProfilePageState extends State<ProfilePage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF185FA5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 38,
-                        backgroundColor: const Color(0xFF0C447C),
-                        child: Text(
-                          user.initials,
+                GestureDetector(
+                  onTap: _changePhoto,
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF185FA5),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            _buildAvatar(user),
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              padding: const EdgeInsets.all(4),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                size: 14,
+                                color: Color(0xFF185FA5),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          user.name,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 22,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        user.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Chip(label: Text(user.role)),
-                    ],
+                        const SizedBox(height: 4),
+                        Chip(label: Text(user.role)),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Card(
                   child: Column(
                     children: [
+                      ListTile(
+                        leading: const Icon(Icons.photo_camera_outlined),
+                        title: const Text('Cambiar foto de perfil'),
+                        onTap: _changePhoto,
+                      ),
+                      const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.email_outlined),
                         title: Text(user.email),

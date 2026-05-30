@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/chat_models.dart';
@@ -40,6 +41,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   String? _error;
   AppUser? _me;
   List<ChatMessage> _messages = const <ChatMessage>[];
+  ChatMessage? _replyToMessage;
+  late String _chatName;
 
   List<String> _searchMatchIds = const <String>[];
   int _searchIndex = -1;
@@ -50,6 +53,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   @override
   void initState() {
     super.initState();
+    _chatName = widget.chat.name;
     _loadInitial();
     _startPolling();
   }
@@ -209,8 +213,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       await widget.apiService.sendMessage(
         chatId: widget.chat.id,
         content: content,
+        replyToMessageId: _replyToMessage?.id,
       );
       _messageController.clear();
+      _replyToMessage = null;
       await _loadMessages();
       _simulateTyping();
     } catch (e) {
@@ -226,10 +232,35 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     }
   }
 
-  Future<void> _sendAttachmentDemo() async {
+  Future<void> _pickAndSendAttachment() async {
     if (_sending) {
       return;
     }
+
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      withData: true,
+      type: FileType.any,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+
+    final attachments = result.files
+        .where((file) => file.bytes != null && file.bytes!.isNotEmpty)
+        .map(
+          (file) => UploadFilePayload(
+            fileName: file.name,
+            bytes: file.bytes!,
+          ),
+        )
+        .toList();
+
+    if (attachments.isEmpty) {
+      return;
+    }
+
     setState(() {
       _sending = true;
       _error = null;
@@ -238,13 +269,12 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     try {
       await widget.apiService.sendMessage(
         chatId: widget.chat.id,
-        content: 'Adjunto un archivo para revision.',
-        type: 'FILE',
-        attachment: const ChatAttachment(
-          fileName: 'documento_demo.pdf',
-          fileType: 'PDF',
-        ),
+        content: _messageController.text.trim(),
+        attachmentFiles: attachments,
+        replyToMessageId: _replyToMessage?.id,
       );
+      _messageController.clear();
+      _replyToMessage = null;
       await _loadMessages();
       _simulateTyping();
     } catch (e) {
@@ -257,6 +287,130 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           _sending = false;
         });
       }
+    }
+  }
+
+  Future<void> _reactToMessage(ChatMessage message) async {
+    const emojis = <String>['👍', '🔥', '✅', '🎉', '😊', '🙌'];
+    final emoji = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: emojis
+                  .map(
+                    (value) => ActionChip(
+                      label: Text(value, style: const TextStyle(fontSize: 22)),
+                      onPressed: () => Navigator.of(context).pop(value),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (emoji == null) {
+      return;
+    }
+
+    await widget.apiService.reactToMessage(
+      chatId: widget.chat.id,
+      messageId: message.id,
+      emoji: emoji,
+    );
+    await _loadMessages();
+  }
+
+  Future<void> _renameGroup() async {
+    final controller = TextEditingController(text: _chatName);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Renombrar grupo'),
+          content: TextField(
+            controller: controller,
+            maxLength: 60,
+            decoration: const InputDecoration(
+              labelText: 'Nuevo nombre',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.isEmpty) {
+                  return;
+                }
+                Navigator.of(context).pop(value);
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+
+    if (result == null || result.isEmpty) {
+      return;
+    }
+
+    await widget.apiService.renameGroupChat(chatId: widget.chat.id, name: result);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _chatName = result;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Grupo renombrado.')),
+    );
+  }
+
+  Future<void> _openMessageActions(ChatMessage message) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.reply),
+                title: const Text('Responder'),
+                onTap: () => Navigator.of(context).pop('reply'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.emoji_emotions_outlined),
+                title: const Text('Reaccionar'),
+                onTap: () => Navigator.of(context).pop('react'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (action == 'reply') {
+      setState(() {
+        _replyToMessage = message;
+      });
+    } else if (action == 'react') {
+      await _reactToMessage(message);
     }
   }
 
@@ -411,8 +565,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 Expanded(
                   child: ListView.separated(
                     itemCount: _participants.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, index) {
+                    separatorBuilder: (context, index) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
                       final p = _participants[index];
                       return ListTile(
                         leading: CircleAvatar(child: Text(initials(p.name))),
@@ -672,7 +826,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.chat.name),
+            Text(_chatName),
             Text(
               widget.chat.isGroup
                   ? '${_participants.isEmpty ? '' : '${_participants.length} participantes · '}Chat grupal'
@@ -692,6 +846,9 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 if (value == 'add') {
                   await _openAddParticipant();
                 }
+                if (value == 'rename') {
+                  await _renameGroup();
+                }
                 if (value == 'leave') {
                   await _leaveGroup();
                 }
@@ -705,6 +862,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   const PopupMenuItem(
                     value: 'add',
                     child: Text('Agregar miembro'),
+                  ),
+                if (_isAdmin)
+                  const PopupMenuItem(
+                    value: 'rename',
+                    child: Text('Renombrar grupo'),
                   ),
                 const PopupMenuItem(
                   value: 'leave',
@@ -767,95 +929,162 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                       final isMine = _me != null && message.senderId == _me!.id;
                       final isCurrent = _isCurrentSearchHit(message.id);
 
-                      return Align(
-                        alignment: isMine
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          constraints: const BoxConstraints(maxWidth: 320),
-                          decoration: BoxDecoration(
-                            color: isMine
-                                ? const Color(0xFF185FA5)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: isCurrent
-                                ? Border.all(color: Colors.amber, width: 2)
-                                : (isMine
-                                      ? null
-                                      : Border.all(
-                                          color: const Color(0xFFE0E0E0),
-                                        )),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: isMine
-                                ? CrossAxisAlignment.end
-                                : CrossAxisAlignment.start,
-                            children: [
-                              if (widget.chat.isGroup && !isMine)
-                                Text(
-                                  message.senderName,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF185FA5),
+                      return GestureDetector(
+                        onLongPress: () => _openMessageActions(message),
+                        child: Align(
+                          alignment: isMine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            constraints: const BoxConstraints(maxWidth: 320),
+                            decoration: BoxDecoration(
+                              color: isMine
+                                  ? const Color(0xFF185FA5)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: isCurrent
+                                  ? Border.all(color: Colors.amber, width: 2)
+                                  : (isMine
+                                        ? null
+                                        : Border.all(
+                                            color: const Color(0xFFE0E0E0),
+                                          )),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: isMine
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: [
+                                if (widget.chat.isGroup && !isMine)
+                                  Text(
+                                    message.senderName,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF185FA5),
+                                    ),
                                   ),
-                                ),
-                              _buildHighlightedText(message.content, isMine),
-                              if (message.attachment != null)
-                                Container(
-                                  margin: const EdgeInsets.only(top: 6),
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: isMine
-                                        ? Colors.white.withValues(alpha: 0.2)
-                                        : const Color(0xFFF0F4F9),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        message.attachment!.isImage
-                                            ? Icons.image_outlined
-                                            : Icons.picture_as_pdf_outlined,
-                                        size: 20,
+                                if (message.replyTo != null)
+                                  Container(
+                                    width: double.infinity,
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: isMine
+                                          ? Colors.white.withValues(alpha: 0.15)
+                                          : const Color(0xFFF5F7FB),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
                                         color: isMine
-                                            ? Colors.white
-                                            : const Color(0xFF185FA5),
+                                            ? Colors.white.withValues(alpha: 0.2)
+                                            : const Color(0xFFE4E8F0),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          message.attachment!.fileName,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: isMine
-                                                ? Colors.white
-                                                : Colors.black87,
+                                    ),
+                                    child: Text(
+                                      message.replyTo!.content,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isMine
+                                            ? Colors.white.withValues(alpha: 0.88)
+                                            : Colors.black54,
+                                      ),
+                                    ),
+                                  ),
+                                _buildHighlightedText(message.content, isMine),
+                                if (message.attachment != null)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 6),
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: isMine
+                                          ? Colors.white.withValues(alpha: 0.2)
+                                          : const Color(0xFFF0F4F9),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          message.attachment!.isImage
+                                              ? Icons.image_outlined
+                                              : Icons.picture_as_pdf_outlined,
+                                          size: 20,
+                                          color: isMine
+                                              ? Colors.white
+                                              : const Color(0xFF185FA5),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            message.attachment!.fileName,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isMine
+                                                  ? Colors.white
+                                                  : Colors.black87,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
+                                  ),
+                                if (message.reactions.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      children: message.reactions
+                                          .map(
+                                            (reaction) => Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: reaction.mine
+                                                    ? const Color(0xFFDAECFF)
+                                                    : const Color(0xFFF3F4F6),
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                                border: Border.all(
+                                                  color: reaction.mine
+                                                      ? const Color(0xFF8BB8E8)
+                                                      : const Color(0xFFE5E7EB),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                '${reaction.emoji} ${reaction.count}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  formatTime(message.timestamp),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isMine
+                                        ? Colors.white.withValues(alpha: 0.75)
+                                        : Colors.black45,
                                   ),
                                 ),
-                              const SizedBox(height: 3),
-                              Text(
-                                formatTime(message.timestamp),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: isMine
-                                      ? Colors.white.withValues(alpha: 0.75)
-                                      : Colors.black45,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -868,7 +1097,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '${widget.chat.name.split(' ').first} esta escribiendo...',
+                  '${_chatName.split(' ').first} esta escribiendo...',
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ),
@@ -882,37 +1111,71 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    onPressed: _sending ? null : _sendAttachmentDemo,
-                    icon: const Icon(Icons.attach_file),
-                  ),
-                  IconButton(
-                    onPressed: _openEmojiPicker,
-                    icon: const Icon(Icons.emoji_emotions_outlined),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      minLines: 1,
-                      maxLines: 4,
-                      decoration: const InputDecoration(
-                        hintText: 'Escribe un mensaje...',
-                        border: OutlineInputBorder(),
+                  if (_replyToMessage != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F7FB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE4E8F0)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.reply, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _replyToMessage!.content,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => setState(() => _replyToMessage = null),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _sending ? null : _sendMessage,
-                    child: _sending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: _sending ? null : _pickAndSendAttachment,
+                        icon: const Icon(Icons.attach_file),
+                      ),
+                      IconButton(
+                        onPressed: _openEmojiPicker,
+                        icon: const Icon(Icons.emoji_emotions_outlined),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _messageController,
+                          minLines: 1,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            hintText: 'Escribe un mensaje...',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _sending ? null : _sendMessage,
+                        child: _sending
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send),
+                      ),
+                    ],
                   ),
                 ],
               ),
