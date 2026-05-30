@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'screens/pages.dart';
@@ -35,6 +37,8 @@ class _BootstrapPageState extends State<BootstrapPage> {
   void initState() {
     super.initState();
     _hasTokenFuture = _authService.hasToken();
+    // Sincroniza el token FCM al abrir la app si ya hay sesión activa.
+    unawaited(_authService.syncDevicePushToken());
   }
 
   @override
