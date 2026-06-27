@@ -24,7 +24,7 @@ class _ProfilePageState extends State<ProfilePage> {
   static const List<Map<String, String>> _statuses = [
     {'value': 'DISPONIBLE', 'label': 'Disponible'},
     {'value': 'OCUPADO', 'label': 'Ocupado'},
-    {'value': 'EN_REUNION', 'label': 'En reunion'},
+    {'value': 'EN_REUNION', 'label': 'En reunión'},
     {'value': 'DESCONECTADO', 'label': 'Desconectado'},
   ];
 
@@ -49,8 +49,8 @@ class _ProfilePageState extends State<ProfilePage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cerrar sesion'),
-        content: const Text('Estas seguro que quieres cerrar sesion?'),
+        title: const Text('Cerrar sesión'),
+        content: const Text('¿Estás seguro que quieres cerrar sesión?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -277,7 +277,7 @@ class _ProfilePageState extends State<ProfilePage> {
               if (next != confirm) {
                 messenger.showSnackBar(
                   const SnackBar(
-                    content: Text('Las contrasenas no coinciden.'),
+                    content: Text('Las contraseñas no coinciden.'),
                   ),
                 );
                 return;
@@ -288,7 +288,7 @@ class _ProfilePageState extends State<ProfilePage> {
               if (next.length < 8 || !hasUpper || !hasNumber || !hasSpecial) {
                 messenger.showSnackBar(
                   const SnackBar(
-                    content: Text('Minimo 8, mayuscula, numero y especial.'),
+                    content: Text('Mínimo 8 caracteres, mayúscula, número y especial.'),
                   ),
                 );
                 return;
@@ -304,7 +304,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 }
                 navigator.pop();
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('Contrasena actualizada.')),
+                  const SnackBar(content: Text('Contraseña actualizada.')),
                 );
               } catch (e) {
                 if (!context.mounted) {
@@ -319,7 +319,7 @@ class _ProfilePageState extends State<ProfilePage> {
             }
 
             return AlertDialog(
-              title: const Text('Cambiar contrasena'),
+              title: const Text('Cambiar contraseña'),
               content: SizedBox(
                 width: 420,
                 child: Column(
@@ -329,7 +329,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       controller: currentController,
                       obscureText: obscureCurrent,
                       decoration: InputDecoration(
-                        labelText: 'Contrasena actual',
+                        labelText: 'Contraseña actual',
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           onPressed: () => setModalState(
@@ -348,7 +348,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       controller: newController,
                       obscureText: obscureNew,
                       decoration: InputDecoration(
-                        labelText: 'Nueva contrasena',
+                        labelText: 'Nueva contraseña',
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           onPressed: () =>
@@ -366,7 +366,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       controller: confirmController,
                       obscureText: obscureConfirm,
                       decoration: InputDecoration(
-                        labelText: 'Confirmar nueva contrasena',
+                        labelText: 'Confirmar nueva contraseña',
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           onPressed: () => setModalState(
@@ -491,6 +491,27 @@ class _ProfilePageState extends State<ProfilePage> {
     return found.first['label']!;
   }
 
+  Color _statusColor(String? value) {
+    switch (value) {
+      case 'DISPONIBLE':
+        return Colors.green;
+      case 'OCUPADO':
+        return Colors.red;
+      case 'EN_REUNION':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatEnum(String? value) {
+    if (value == null || value.isEmpty) return 'Sin asignar';
+    return value
+        .split('_')
+        .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join(' ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _user;
@@ -539,7 +560,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Chip(label: Text(user.role)),
+                        Chip(label: Text(_formatEnum(user.role))),
                       ],
                     ),
                   ),
@@ -549,26 +570,20 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.photo_camera_outlined),
-                        title: const Text('Cambiar foto de perfil'),
-                        onTap: _changePhoto,
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
                         leading: const Icon(Icons.email_outlined),
                         title: Text(user.email),
-                        subtitle: const Text('Correo electronico'),
+                        subtitle: const Text('Correo electrónico'),
                       ),
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.work_outline),
-                        title: Text(user.cargo ?? user.role),
+                        title: Text(_formatEnum(user.cargo)),
                         subtitle: const Text('Cargo'),
                       ),
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.business_outlined),
-                        title: Text(user.sector ?? 'Sin asignar'),
+                        title: Text(_formatEnum(user.sector)),
                         subtitle: const Text('Sector'),
                       ),
                     ],
@@ -579,7 +594,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.circle),
+                        leading: Icon(
+                          Icons.circle,
+                          color: _statusColor(user.status),
+                        ),
                         title: const Text('Estado'),
                         subtitle: Text(_statusLabel(user.status)),
                         onTap: _changeStatus,
@@ -593,19 +611,17 @@ class _ProfilePageState extends State<ProfilePage> {
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.lock_outline),
-                        title: const Text('Cambiar contrasena'),
+                        title: const Text('Cambiar contraseña'),
                         onTap: _changePassword,
                       ),
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.notifications_outlined),
                         title: const Text('Notificaciones'),
-                        subtitle: const Text(
-                          'Configuracion basica en desarrollo',
-                        ),
+                        subtitle: const Text('Configuración básica en desarrollo'),
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Proximamente')),
+                            const SnackBar(content: Text('Próximamente')),
                           );
                         },
                       ),
@@ -613,12 +629,10 @@ class _ProfilePageState extends State<ProfilePage> {
                       ListTile(
                         leading: const Icon(Icons.shield_outlined),
                         title: const Text('Privacidad'),
-                        subtitle: const Text(
-                          'Configuracion basica en desarrollo',
-                        ),
+                        subtitle: const Text('Configuración básica en desarrollo'),
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Proximamente')),
+                            const SnackBar(content: Text('Próximamente')),
                           );
                         },
                       ),
@@ -629,7 +643,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 FilledButton.tonalIcon(
                   onPressed: _confirmLogout,
                   icon: const Icon(Icons.logout),
-                  label: const Text('Cerrar sesion'),
+                  label: const Text('Cerrar sesión'),
                 ),
               ],
             ),
