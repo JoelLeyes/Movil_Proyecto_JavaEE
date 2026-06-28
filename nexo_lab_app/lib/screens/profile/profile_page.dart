@@ -614,6 +614,28 @@ class _ProfilePageState extends State<ProfilePage> {
                         title: const Text('Cambiar contraseña'),
                         onTap: _changePassword,
                       ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.notifications_outlined),
+                        title: const Text('Notificaciones'),
+                        subtitle: const Text('Configuración básica en desarrollo'),
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Próximamente')),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.shield_outlined),
+                        title: const Text('Privacidad'),
+                        subtitle: const Text('Configuración básica en desarrollo'),
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Próximamente')),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
