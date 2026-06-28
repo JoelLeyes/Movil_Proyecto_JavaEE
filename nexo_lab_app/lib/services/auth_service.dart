@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -18,6 +17,7 @@ class ApiConfig {
     final hasApiSuffix = normalized.toLowerCase().endsWith('/api');
     final candidates = <String>{};
 
+    // Prefer a single, explicit API base URL.
     if (hasApiSuffix) {
       candidates.add(normalized);
     } else {
@@ -52,6 +52,7 @@ class AuthService {
 
   Future<String?> getToken() => _storage.read(key: _tokenKey);
 
+
   Future<AppUser?> getCurrentUser() async {
     final raw = await _storage.read(key: _userKey);
     if (raw == null || raw.isEmpty) {
@@ -72,30 +73,9 @@ class AuthService {
     await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
   }
 
-  /// Obtiene el token FCM del dispositivo y lo envía al backend.
-  /// Se llama tras el login y al iniciar la app con sesión activa.
   Future<void> syncDevicePushToken() async {
-    try {
-      final token = await getToken();
-      if (token == null) return;
-
-      await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-
-      final fcmToken = await FirebaseMessaging.instance.getToken();
-      if (fcmToken == null) return;
-
-      await _authorizedPutJsonWithApiFallback(
-        '/usuarios/me/push-token',
-        {'pushToken': fcmToken},
-        token,
-      );
-    } catch (_) {
-      // No crítico: si falla el sync del token la app sigue funcionando.
-    }
+    // Notificaciones removidas — función no implementada.
+    return;
   }
 
   Future<void> logout() async {
@@ -130,9 +110,15 @@ class AuthService {
         rawUser.map((k, v) => MapEntry(k.toString(), v)),
       );
       await saveSession(token: token, user: user);
-      unawaited(syncDevicePushToken());
       return user;
     } catch (e) {
+      final error = e.toString().toLowerCase();
+      final isConnectionIssue =
+          error.contains('timed out') ||
+          error.contains('socket') ||
+          error.contains('failed host lookup') ||
+          error.contains('no se pudo conectar');
+
       rethrow;
     }
   }
@@ -218,8 +204,14 @@ class AuthService {
       }
     }
 
-    if (lastNotFound != null) return lastNotFound;
-    if (lastError != null) throw Exception(lastError.toString());
+    if (lastNotFound != null) {
+      return lastNotFound;
+    }
+
+    if (lastError != null) {
+      throw Exception(lastError.toString());
+    }
+
     throw Exception('No se pudo conectar con el backend.');
   }
 
@@ -259,8 +251,14 @@ class AuthService {
       }
     }
 
-    if (lastNotFound != null) return lastNotFound;
-    if (lastError != null) throw Exception(lastError.toString());
+    if (lastNotFound != null) {
+      return lastNotFound;
+    }
+
+    if (lastError != null) {
+      throw Exception(lastError.toString());
+    }
+
     throw Exception('No se pudo conectar con el backend.');
   }
 }
