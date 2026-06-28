@@ -483,6 +483,7 @@ class ApiService {
         cargo: current.cargo,
         sector: current.sector,
         status: status,
+        fotoPerfilUrl: current.fotoPerfilUrl,
       );
       await _authService.saveSession(token: token, user: updated);
       return updated;
