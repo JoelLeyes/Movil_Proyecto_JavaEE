@@ -33,6 +33,8 @@ class _ChatsPageState extends State<ChatsPage> {
   @override
   void initState() {
     super.initState();
+    _apiService = ApiService(widget.authService);
+    unawaited(_bootstrap());
   }
 
   Future<void> _bootstrap() async {
