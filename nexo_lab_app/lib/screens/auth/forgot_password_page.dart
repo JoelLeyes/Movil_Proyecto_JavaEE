@@ -16,6 +16,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _emailController = TextEditingController();
   bool _loading = false;
   String? _message;
+  bool _isError = false;
 
   @override
   void dispose() {
@@ -30,25 +31,42 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     setState(() {
       _loading = true;
       _message = null;
+      _isError = false;
     });
 
-    final message = await widget.authService.forgotPassword(
-      _emailController.text.trim(),
-    );
+    try {
+      final message = await widget.authService.forgotPassword(
+        _emailController.text.trim(),
+      );
 
-    if (!mounted) {
-      return;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _message = message;
+        _isError = false;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _message = e.toString().replaceFirst('Exception: ', '');
+        _isError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
-    setState(() {
-      _loading = false;
-      _message = message;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Recuperar contrasena')),
+      appBar: AppBar(title: const Text('Recuperar contraseña')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -85,12 +103,15 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.1),
+                            color: (_isError ? Colors.red : Colors.green)
+                                .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             _message!,
-                            style: const TextStyle(color: Colors.green),
+                            style: TextStyle(
+                              color: _isError ? Colors.red : Colors.green,
+                            ),
                           ),
                         ),
                       SizedBox(

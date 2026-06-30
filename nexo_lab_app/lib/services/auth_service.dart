@@ -112,13 +112,6 @@ class AuthService {
       await saveSession(token: token, user: user);
       return user;
     } catch (e) {
-      final error = e.toString().toLowerCase();
-      final isConnectionIssue =
-          error.contains('timed out') ||
-          error.contains('socket') ||
-          error.contains('failed host lookup') ||
-          error.contains('no se pudo conectar');
-
       rethrow;
     }
   }
@@ -133,44 +126,36 @@ class AuthService {
     final nombre = parts.isEmpty ? fullName : parts.first;
     final apellido = parts.length > 1 ? parts.sublist(1).join(' ') : '';
 
-    try {
-      final response = await _postJsonWithApiFallback(
-        '/auth/register',
-        <String, dynamic>{
-          'nombre': nombre,
-          'apellido': apellido,
-          'name': name,
-          'email': email,
-          'password': password,
-        },
-      );
+    final response = await _postJsonWithApiFallback(
+      '/auth/register',
+      <String, dynamic>{
+        'nombre': nombre,
+        'apellido': apellido,
+        'name': name,
+        'email': email,
+        'password': password,
+      },
+    );
 
-      final body = decodeBody(response.body);
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return body['message']?.toString() ??
-            'Usuario registrado correctamente.';
-      }
-      throw Exception(body['message']?.toString() ?? 'No se pudo registrar.');
-    } catch (_) {
-      return 'Servidor AWS apagado. Cuenta creada en modo demo.';
+    final body = decodeBody(response.body);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return body['message']?.toString() ??
+          'Usuario registrado correctamente.';
     }
+    throw Exception(body['message']?.toString() ?? 'No se pudo registrar.');
   }
 
   Future<String> forgotPassword(String email) async {
-    try {
-      final response = await _postJsonWithApiFallback(
-        '/auth/forgot-password',
-        <String, dynamic>{'email': email},
-      );
+    final response = await _postJsonWithApiFallback(
+      '/auth/forgot-password',
+      <String, dynamic>{'email': email},
+    );
 
-      final body = decodeBody(response.body);
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return body['message']?.toString() ?? 'Enlace enviado.';
-      }
-      throw Exception(body['message']?.toString() ?? 'No se pudo enviar.');
-    } catch (_) {
-      return 'Servidor AWS apagado. Simulamos envio de recuperacion.';
+    final body = decodeBody(response.body);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return body['message']?.toString() ?? 'Enlace enviado.';
     }
+    throw Exception(body['message']?.toString() ?? 'No se pudo enviar.');
   }
 
   Future<http.Response> _postJsonWithApiFallback(

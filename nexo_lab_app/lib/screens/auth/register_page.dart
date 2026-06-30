@@ -16,41 +16,21 @@ class _RegisterPageState extends State<RegisterPage> {
   int _step = 0;
   bool _loading = false;
   bool _accepted = false;
-  bool _notificationsEnabled = true;
   bool _obscure1 = true;
   bool _obscure2 = true;
-  int _selectedAvatar = 0;
   String? _error;
   String? _registerMessage;
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   final _formKey1 = GlobalKey<FormState>();
   final _formKey2 = GlobalKey<FormState>();
 
-  static const List<Color> _avatarBg = <Color>[
-    Color(0xFFE6F1FB),
-    Color(0xFFEEEDFE),
-    Color(0xFFE1F5EE),
-    Color(0xFFFAEEDA),
-    Color(0xFFFBEAF0),
-  ];
-
-  static const List<Color> _avatarFg = <Color>[
-    Color(0xFF0C447C),
-    Color(0xFF3C3489),
-    Color(0xFF085041),
-    Color(0xFF633806),
-    Color(0xFF72243E),
-  ];
-
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
@@ -68,36 +48,35 @@ class _RegisterPageState extends State<RegisterPage> {
       _error = null;
     });
 
-    final message = await widget.authService.register(
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    try {
+      final message = await widget.authService.register(
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    if (!mounted) {
-      return;
-    }
+      if (!mounted) {
+        return;
+      }
 
-    setState(() {
-      _loading = false;
-      _registerMessage = message;
-      _step = 3;
-    });
-  }
-
-  String get _avatarInitials {
-    final name = _nameController.text.trim();
-    final parts = name
-        .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
-        .toList();
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+      setState(() {
+        _registerMessage = message;
+        _step = 3;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
-    if (name.isNotEmpty) {
-      return name.substring(0, name.length > 2 ? 2 : name.length).toUpperCase();
-    }
-    return 'NL';
   }
 
   int get _passwordScore {
@@ -200,14 +179,6 @@ class _RegisterPageState extends State<RegisterPage> {
                                 }
                                 return null;
                               },
-                            ),
-                            const SizedBox(height: 10),
-                            TextFormField(
-                              controller: _phoneController,
-                              decoration: const InputDecoration(
-                                labelText: 'Telefono (opcional)',
-                                border: OutlineInputBorder(),
-                              ),
                             ),
                             const SizedBox(height: 10),
                             SizedBox(
@@ -374,64 +345,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ),
                     Step(
-                      title: const Text('Perfil'),
+                      title: const Text('Términos'),
                       isActive: _step >= 2,
                       content: Column(
                         children: [
-                          const Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Color de avatar',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            children: List<Widget>.generate(_avatarBg.length, (
-                              index,
-                            ) {
-                              final selected = _selectedAvatar == index;
-                              return InkWell(
-                                onTap: () =>
-                                    setState(() => _selectedAvatar = index),
-                                borderRadius: BorderRadius.circular(30),
-                                child: Container(
-                                  decoration: selected
-                                      ? BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: const Color(0xFF185FA5),
-                                            width: 2,
-                                          ),
-                                        )
-                                      : null,
-                                  child: CircleAvatar(
-                                    radius: 24,
-                                    backgroundColor: _avatarBg[index],
-                                    child: Text(
-                                      _avatarInitials,
-                                      style: TextStyle(
-                                        color: _avatarFg[index],
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }),
-                          ),
-                          const SizedBox(height: 10),
-                          CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: _notificationsEnabled,
-                            onChanged: (v) => setState(
-                              () => _notificationsEnabled = v ?? false,
-                            ),
-                            title: const Text(
-                              'Recibir notificaciones por email',
-                            ),
-                          ),
                           CheckboxListTile(
                             contentPadding: EdgeInsets.zero,
                             value: _accepted,

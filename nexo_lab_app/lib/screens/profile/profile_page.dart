@@ -593,34 +593,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.lock_outline),
-                        title: const Text('Cambiar contrasena'),
+                        title: const Text('Cambiar contraseña'),
                         onTap: _changePassword,
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.notifications_outlined),
-                        title: const Text('Notificaciones'),
-                        subtitle: const Text(
-                          'Configuracion basica en desarrollo',
-                        ),
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Proximamente')),
-                          );
-                        },
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.shield_outlined),
-                        title: const Text('Privacidad'),
-                        subtitle: const Text(
-                          'Configuracion basica en desarrollo',
-                        ),
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Proximamente')),
-                          );
-                        },
                       ),
                     ],
                   ),
