@@ -28,6 +28,13 @@ class _ProfilePageState extends State<ProfilePage> {
     {'value': 'DESCONECTADO', 'label': 'Desconectado'},
   ];
 
+  static const Map<String, Color> _statusColors = {
+    'DISPONIBLE': Color(0xFF22C55E),
+    'OCUPADO': Color(0xFFF59E0B),
+    'EN_REUNION': Color(0xFFEF4444),
+    'DESCONECTADO': Color(0xFF9CA3AF),
+  };
+
   @override
   void initState() {
     super.initState();
@@ -89,6 +96,7 @@ class _ProfilePageState extends State<ProfilePage> {
             children: _statuses
                 .map(
                   (status) => ListTile(
+                    leading: _statusDot(status['value']),
                     title: Text(status['label']!),
                     trailing: _user?.status == status['value']
                         ? const Icon(Icons.check, color: Colors.green)
@@ -491,6 +499,24 @@ class _ProfilePageState extends State<ProfilePage> {
     return found.first['label']!;
   }
 
+  Color _statusColor(String? value) {
+    if (value == null || value.isEmpty) {
+      return _statusColors['DESCONECTADO']!;
+    }
+    return _statusColors[value.toUpperCase()] ?? _statusColors['DESCONECTADO']!;
+  }
+
+  Widget _statusDot(String? value, {double size = 12}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: _statusColor(value),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _user;
@@ -579,7 +605,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.circle),
+                        leading: _statusDot(user.status, size: 14),
                         title: const Text('Estado'),
                         subtitle: Text(_statusLabel(user.status)),
                         onTap: _changeStatus,
