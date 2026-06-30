@@ -27,22 +27,22 @@ class _ChatsPageState extends State<ChatsPage> {
   String _tab = 'all';
   String? _error;
   AppUser? _user;
+
+    void closeDialog([ChatPreview? result]) {
+      if (!dialogOpen) {
+        return;
+      }
+      dialogOpen = false;
+      searchDebounce?.cancel();
+      FocusManager.instance.primaryFocus?.unfocus();
+      Navigator.of(pageContext).pop(result);
+    }
   Timer? _refreshTimer;
   Map<int, ChatPreview> _chatSnapshot = <int, ChatPreview>{};
 
   @override
   void initState() {
     super.initState();
-    _apiService = ApiService(widget.authService);
-    _bootstrap();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _loadChats(silent: true);
-    });
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
     super.dispose();
   }
 
