@@ -591,12 +591,13 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     final searchController = TextEditingController();
     List<AppUser> searchResults = const <AppUser>[];
     bool searching = false;
+    var dialogOpen = true;
 
-    await showDialog<void>(
+    final dialogFuture = showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (modalContext, setModalState) {
             Future<void> runSearch(String raw) async {
               final query = raw.trim();
               if (query.length < 2) {
@@ -607,108 +608,126 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 return;
               }
               setModalState(() => searching = true);
-              final results = await widget.apiService.searchUsers(query);
-              if (!context.mounted) {
-                return;
+              try {
+                final results = await widget.apiService.searchUsers(query);
+                if (!modalContext.mounted || !dialogOpen) return;
+                final currentIds = _participants.map((p) => p.id).toSet();
+                setModalState(() {
+                  searching = false;
+                  searchResults = results
+                      .where((u) => !currentIds.contains(u.id))
+                      .toList();
+                });
+              } catch (_) {
+                if (!modalContext.mounted || !dialogOpen) return;
+                setModalState(() => searching = false);
               }
-              final currentIds = _participants.map((p) => p.id).toSet();
-              setModalState(() {
-                searching = false;
-                searchResults = results
-                    .where((u) => !currentIds.contains(u.id))
-                    .toList();
-              });
             }
 
-            return AlertDialog(
-              title: const Text('Agregar miembro'),
-              content: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: searchController,
-                      onChanged: runSearch,
-                      decoration: const InputDecoration(
-                        labelText: 'Buscar por nombre o email',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (searching)
-                      const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(),
-                      )
-                    else if (searchController.text.trim().length < 2)
-                      const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Text('Escribe al menos 2 caracteres.'),
-                      )
-                    else if (searchResults.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Text('Sin usuarios disponibles para agregar.'),
-                      )
-                    else
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 280),
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: searchResults.length,
-                          itemBuilder: (_, index) {
-                            final user = searchResults[index];
-                            return ListTile(
-                              leading: CircleAvatar(child: Text(user.initials)),
-                              title: Text(user.name),
-                              subtitle: Text(user.email),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.person_add),
-                                onPressed: () async {
-                                  await widget.apiService.addParticipant(
-                                    chatId: widget.chat.id,
-                                    userId: user.id,
-                                  );
-                                  if (!context.mounted) {
-                                    return;
-                                  }
-                                  Navigator.of(context).pop();
-                                  await _loadParticipants();
-                                  if (!mounted) {
-                                    return;
-                                  }
-                                  ScaffoldMessenger.of(
-                                    this.context,
-                                  ).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        '${user.name} agregado al grupo.',
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
+            return PopScope(
+              canPop: false,
+              onPopInvokedWithResult: (didPop, _) {
+                if (!didPop) {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  dialogOpen = false;
+                  Navigator.of(dialogContext).pop();
+                }
+              },
+              child: AlertDialog(
+                title: const Text('Agregar miembro'),
+                content: SizedBox(
+                  width: 420,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: searchController,
+                        onChanged: runSearch,
+                        decoration: const InputDecoration(
+                          labelText: 'Buscar por nombre o email',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
                         ),
                       ),
-                  ],
+                      const SizedBox(height: 10),
+                      if (searching)
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(),
+                        )
+                      else if (searchController.text.trim().length < 2)
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('Escribe al menos 2 caracteres.'),
+                        )
+                      else if (searchResults.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('Sin usuarios disponibles para agregar.'),
+                        )
+                      else
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 280),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: searchResults.length,
+                            itemBuilder: (_, index) {
+                              final user = searchResults[index];
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  child: Text(user.initials),
+                                ),
+                                title: Text(user.name),
+                                subtitle: Text(user.email),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.person_add),
+                                  onPressed: () async {
+                                    await widget.apiService.addParticipant(
+                                      chatId: widget.chat.id,
+                                      userId: user.id,
+                                    );
+                                    if (!modalContext.mounted || !dialogOpen) {
+                                      return;
+                                    }
+                                    dialogOpen = false;
+                                    Navigator.of(dialogContext).pop();
+                                    await _loadParticipants();
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '${user.name} agregado al grupo.',
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      dialogOpen = false;
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cerrar'),
+                  ),
+                ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cerrar'),
-                ),
-              ],
             );
           },
         );
       },
     );
 
+    dialogFuture.whenComplete(() => dialogOpen = false);
+    await dialogFuture;
     searchController.dispose();
   }
 

@@ -330,17 +330,21 @@ class _ChatsPageState extends State<ChatsPage> {
               }
 
               setModalState(() => searching = true);
-              final results = await _apiService.searchUsers(query);
-              if (!modalContext.mounted || !dialogOpen) {
-                return;
+              try {
+                final results = await _apiService.searchUsers(query);
+                if (!modalContext.mounted || !dialogOpen) return;
+                setModalState(() {
+                  searching = false;
+                  searchResults = results
+                      .where(
+                        (user) => !selected.any((picked) => picked.id == user.id),
+                      )
+                      .toList();
+                });
+              } catch (_) {
+                if (!modalContext.mounted || !dialogOpen) return;
+                setModalState(() => searching = false);
               }
-
-              setModalState(() {
-                searching = false;
-                searchResults = results
-                    .where((user) => !selected.any((picked) => picked.id == user.id))
-                    .toList();
-              });
             }
 
             Widget buildStep1() {
@@ -481,52 +485,65 @@ class _ChatsPageState extends State<ChatsPage> {
               );
             }
 
-            return AlertDialog(
-              scrollable: true,
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 24,
-              ),
-              title: const Text('Nuevo grupo'),
-              content: SizedBox(
-                width: 460,
-                child: step == 1 ? buildStep1() : buildStep2(),
-              ),
-              actions: [
-                if (step == 2)
+            return PopScope(
+              canPop: false,
+              onPopInvokedWithResult: (didPop, _) {
+                if (!didPop) {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  dialogOpen = false;
+                  Navigator.of(dialogContext).pop();
+                }
+              },
+              child: AlertDialog(
+                scrollable: true,
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 24,
+                ),
+                title: const Text('Nuevo grupo'),
+                content: SizedBox(
+                  width: 460,
+                  child: step == 1 ? buildStep1() : buildStep2(),
+                ),
+                actions: [
+                  if (step == 2)
+                    TextButton(
+                      onPressed: () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        setModalState(() {
+                          step = 1;
+                          searchResults = const <AppUser>[];
+                          searching = false;
+                        });
+                      },
+                      child: const Text('Atras'),
+                    ),
                   TextButton(
                     onPressed: () {
                       FocusManager.instance.primaryFocus?.unfocus();
                       dialogOpen = false;
-                      setModalState(() => step = 1);
+                      Navigator.of(dialogContext).pop();
                     },
-                    child: const Text('Atras'),
+                    child: const Text('Cancelar'),
                   ),
-                TextButton(
-                  onPressed: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    dialogOpen = false;
-                    Navigator.of(dialogContext).pop();
-                  },
-                  child: const Text('Cancelar'),
-                ),
-                if (step == 2)
-                  FilledButton(
-                    onPressed: () async {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      final chat = await _apiService.createGroupChat(
-                        name: nameController.text.trim(),
-                        memberIds: selected.map((user) => user.id).toList(),
-                      );
-                      if (!modalContext.mounted || !dialogOpen) {
-                        return;
-                      }
-                      dialogOpen = false;
-                      Navigator.of(dialogContext).pop(chat);
-                    },
-                    child: const Text('Crear grupo'),
-                  ),
-              ],
+                  if (step == 2)
+                    FilledButton(
+                      onPressed: () async {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        final chat = await _apiService.createGroupChat(
+                          name: nameController.text.trim(),
+                          memberIds: selected.map((user) => user.id).toList(),
+                        );
+                        if (!modalContext.mounted || !dialogOpen) {
+                          return;
+                        }
+                        dialogOpen = false;
+                        Navigator.of(dialogContext).pop(chat);
+                      },
+                      child: const Text('Crear grupo'),
+                    ),
+                ],
+              ),
             );
           },
         );
