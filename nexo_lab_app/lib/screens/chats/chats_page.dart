@@ -117,248 +117,298 @@ class _ChatsPageState extends State<ChatsPage> {
       // Notificaciones deshabilitadas — no mostrar notificaciones locales.
       if (unreadIncreased || (hasNewerTimestamp && textChanged)) {
         // Se detectó nuevo mensaje, pero la funcionalidad de notificaciones
+        String? searchError;
         // ha sido deshabilitada temporalmente.
       }
+        Timer? searchDebounce;
     }
 
     _chatSnapshot = nextSnapshot;
   }
+            return StatefulBuilder(
+              builder: (modalContext, setModalState) {
+                Future<void> runSearch(String raw) async {
+                  final query = raw.trim();
+                  searchDebounce?.cancel();
 
-  Future<void> _logout() async {
-    await widget.authService.logout();
-    if (!mounted) {
-      return;
-    }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => WelcomePage(authService: widget.authService),
-      ),
-      (_) => false,
+                  if (query.length < 2) {
+                    setModalState(() {
+                      searchResults = const <AppUser>[];
+                      searching = false;
+                      searchError = null;
+                    });
+                    return;
+                  }
+
+                  setModalState(() {
+                    searching = true;
+                    searchError = null;
+                  });
+
+                  searchDebounce = Timer(const Duration(milliseconds: 350), () async {
+                    try {
+                      final results = await _apiService.searchUsers(query);
+                      if (!modalContext.mounted || !dialogOpen) return;
+
+                      final currentUserId = _user?.id;
+                      final available = results
+                          .where((user) {
+                            if (currentUserId != null && user.id == currentUserId) {
+                              return false;
+                            }
+                            return !selected.any((picked) => picked.id == user.id);
+                          })
+                          .toList();
+
+                      setModalState(() {
+                        searching = false;
+                        searchResults = available;
+                        searchError = available.isEmpty
+                            ? 'No se encontraron usuarios.'
+                            : null;
+                      });
+                    } catch (e) {
+                      if (!modalContext.mounted || !dialogOpen) return;
+                      setModalState(() {
+                        searching = false;
+                        searchResults = const <AppUser>[];
+                        searchError = e.toString().replaceFirst('Exception: ', '');
+                      });
+                    }
+                  });
+                }
     );
-  }
-
-  Future<void> _openCreateOptions() async {
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.person_add_alt_1),
-                title: const Text('Nueva conversacion privada'),
-                onTap: () => Navigator.of(sheetContext).pop('private'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.group_add),
-                title: const Text('Nuevo grupo'),
-                onTap: () => Navigator.of(sheetContext).pop('group'),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (value == 'private') {
-      await _openCreatePrivateChatDialog();
-      return;
-    }
-    if (value == 'group') {
-      await _openCreateGroupDialog();
-    }
-  }
-
-  Future<void> _openCreatePrivateChatDialog() async {
-    final searchController = TextEditingController();
-    List<AppUser> searchResults = const <AppUser>[];
-    bool searching = false;
-    int activeSearchId = 0;
-
-    final created = await showDialog<ChatPreview>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            Future<void> runSearch(String raw) async {
-              final query = raw.trim();
-              activeSearchId += 1;
-              final searchId = activeSearchId;
-
-              if (query.length < 2) {
-                setModalState(() {
-                  searching = false;
-                  searchResults = const <AppUser>[];
-                });
-                return;
-              }
-
-              setModalState(() {
-                searching = true;
-              });
-
-              final results = await _apiService.searchUsers(query);
-              if (!context.mounted || searchId != activeSearchId) {
-                return;
-              }
-
-              setModalState(() {
-                searching = false;
-                searchResults = results;
-              });
-            }
-
-            return AlertDialog(
-              title: const Text('Nueva conversacion'),
-              content: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: searchController,
-                      onChanged: runSearch,
-                      decoration: const InputDecoration(
-                        labelText: 'Buscar por nombre o email',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (searching)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: CircularProgressIndicator(),
-                      )
-                    else if (searchController.text.trim().length < 2)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('Escribe al menos 2 caracteres.'),
-                      )
-                    else if (searchResults.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('No se encontraron usuarios.'),
-                      )
-                    else
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 280),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: searchResults.length,
-                          separatorBuilder: (context, index) =>
-                              const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final user = searchResults[index];
-                            return ListTile(
-                              leading: CircleAvatar(child: Text(user.initials)),
-                              title: Text(user.name),
-                              subtitle: Text(user.email),
-                              onTap: () async {
-                                final chat = await _apiService
-                                    .createPrivateChat(otherUser: user);
-                                if (!context.mounted) {
-                                  return;
-                                }
-                                Navigator.of(context).pop(chat);
-                              },
-                            );
-                          },
+                Widget buildStep1() {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Nombre del grupo',
+                          border: OutlineInputBorder(),
                         ),
                       ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancelar'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    searchController.dispose();
-
-    if (created == null || !mounted) {
-      return;
-    }
-
-    await _loadChats();
-    if (!mounted) {
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatDetailPage(
-          apiService: _apiService,
-          authService: widget.authService,
-          chat: created,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openCreateGroupDialog() async {
-    final pageContext = context;
-    final nameController = TextEditingController();
-    final searchController = TextEditingController();
-    final selected = <AppUser>[];
-    List<AppUser> searchResults = const <AppUser>[];
-    bool searching = false;
-    int step = 1;
-    var dialogOpen = true;
-
-    final dialogFuture = showDialog<ChatPreview>(
-      context: pageContext,
-      builder: (dialogContext) {
-        return PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) {
-              FocusManager.instance.primaryFocus?.unfocus();
-              dialogOpen = false;
-              Navigator.of(dialogContext).pop();
-            }
-          },
-          child: StatefulBuilder(
-            builder: (modalContext, setModalState) {
-              Future<void> runSearch(String raw) async {
-                final query = raw.trim().toLowerCase();
-                if (query.length < 2) {
-                  setModalState(() {
-                    searchResults = const <AppUser>[];
-                    searching = false;
-                  });
-                  return;
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () {
+                            if (nameController.text.trim().length < 2) {
+                              ScaffoldMessenger.of(pageContext).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'El nombre debe tener al menos 2 caracteres.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            setModalState(() => step = 2);
+                          },
+                          child: const Text('Siguiente'),
+                        ),
+                      ),
+                    ],
+                  );
                 }
-
-                setModalState(() => searching = true);
-                try {
-                  final results = await _apiService.searchUsers(query);
-                  if (!modalContext.mounted || !dialogOpen) return;
-                  setModalState(() {
-                    searching = false;
-                    searchResults = results
-                        .where(
-                          (user) => !selected.any((picked) => picked.id == user.id),
+              setModalState(() {
+                Widget buildStep2() {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Miembros seleccionados: ${selected.length}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (selected.isNotEmpty)
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: selected
+                              .map(
+                                (user) => Chip(
+                                  label: Text(user.name),
+                                  onDeleted: () {
+                                    setModalState(() {
+                                      selected.removeWhere(
+                                        (picked) => picked.id == user.id,
+                                      );
+                                      searchResults = searchResults
+                                          .where(
+                                            (result) => !selected.any(
+                                              (picked) => picked.id == result.id,
+                                            ),
+                                          )
+                                          .toList();
+                                    });
+                                  },
+                                ),
+                              )
+                              .toList(),
                         )
-                        .toList();
-                  });
-                } catch (_) {
-                  if (!modalContext.mounted || !dialogOpen) return;
-                  setModalState(() => searching = false);
+                      else
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'No agregaste miembros aun.',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                        ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: searchController,
+                        onChanged: runSearch,
+                        decoration: const InputDecoration(
+                          labelText: 'Buscar usuarios',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (searching)
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(),
+                        )
+                      else if (searchError != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            searchError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        )
+                      else if (searchController.text.trim().length < 2)
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('Escribe al menos 2 caracteres para buscar.'),
+                        )
+                      else if (searchResults.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('No se encontraron usuarios.'),
+                        )
+                      else
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 220),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: searchResults.length,
+                            itemBuilder: (context, index) {
+                              final user = searchResults[index];
+                              return ListTile(
+                                dense: true,
+                                leading: CircleAvatar(
+                                  child: Text(user.initials),
+                                ),
+                                title: Text(user.name),
+                                subtitle: Text(user.email),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.add_circle_outline),
+                                  onPressed: () {
+                                    setModalState(() {
+                                      selected.add(user);
+                                      searchResults.removeWhere(
+                                        (result) => result.id == user.id,
+                                      );
+                                      searchError = null;
+                                    });
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  );
                 }
+    );
+                final dialogWidth =
+                    (MediaQuery.of(modalContext).size.width - 32).clamp(
+                      280.0,
+                      460.0,
+                    ).toDouble();
+
+                return AlertDialog(
+                  scrollable: true,
+                  insetPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 24,
+                  ),
+                  title: const Text('Nuevo grupo'),
+                  content: SizedBox(
+                    width: dialogWidth,
+                    child: step == 1 ? buildStep1() : buildStep2(),
+                  ),
+                  actions: [
+                    if (step == 2)
+                      TextButton(
+                        onPressed: () {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          setModalState(() {
+                            step = 1;
+                            searchResults = const <AppUser>[];
+                            searching = false;
+                            searchError = null;
+                          });
+                        },
+                        child: const Text('Atras'),
+                      ),
+                    TextButton(
+                      onPressed: () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        dialogOpen = false;
+                        searchDebounce?.cancel();
+                        Navigator.of(dialogContext).pop();
+                      },
+                      child: const Text('Cancelar'),
+                    ),
+                    if (step == 2)
+                      FilledButton(
+                        onPressed: () async {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          try {
+                            final chat = await _apiService.createGroupChat(
+                              name: nameController.text.trim(),
+                              memberIds: selected.map((user) => user.id).toList(),
+                            );
+                            if (!modalContext.mounted || !dialogOpen) {
+                              return;
+                            }
+                            dialogOpen = false;
+                            searchDebounce?.cancel();
+                            Navigator.of(dialogContext).pop(chat);
+                          } catch (e) {
+                            if (!modalContext.mounted) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(pageContext).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  e.toString().replaceFirst('Exception: ', ''),
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('Crear grupo'),
+                      ),
+                  ],
+                );
+              },
+            );
               }
 
               Widget buildStep1() {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
+          searchDebounce?.cancel();
                   children: [
                     TextField(
                       controller: nameController,

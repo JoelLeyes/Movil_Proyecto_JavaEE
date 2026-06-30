@@ -591,97 +591,124 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     final searchController = TextEditingController();
     List<AppUser> searchResults = const <AppUser>[];
     bool searching = false;
+    String? searchError;
     var dialogOpen = true;
+    Timer? searchDebounce;
 
     final dialogFuture = showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) {
-              FocusManager.instance.primaryFocus?.unfocus();
-              dialogOpen = false;
-              Navigator.of(dialogContext).pop();
-            }
-          },
-          child: StatefulBuilder(
-            builder: (modalContext, setModalState) {
-              Future<void> runSearch(String raw) async {
-                final query = raw.trim();
-                if (query.length < 2) {
-                  setModalState(() {
-                    searchResults = const <AppUser>[];
-                    searching = false;
-                  });
-                  return;
-                }
-                setModalState(() => searching = true);
+        return StatefulBuilder(
+          builder: (modalContext, setModalState) {
+            Future<void> runSearch(String raw) async {
+              final query = raw.trim();
+              searchDebounce?.cancel();
+
+              if (query.length < 2) {
+                setModalState(() {
+                  searchResults = const <AppUser>[];
+                  searching = false;
+                  searchError = null;
+                });
+                return;
+              }
+
+              setModalState(() {
+                searching = true;
+                searchError = null;
+              });
+
+              searchDebounce = Timer(const Duration(milliseconds: 350), () async {
                 try {
                   final results = await widget.apiService.searchUsers(query);
                   if (!modalContext.mounted || !dialogOpen) return;
                   final currentIds = _participants.map((p) => p.id).toSet();
+                  final available = results
+                      .where((u) => !currentIds.contains(u.id))
+                      .toList();
                   setModalState(() {
                     searching = false;
-                    searchResults = results
-                        .where((u) => !currentIds.contains(u.id))
-                        .toList();
+                    searchResults = available;
+                    searchError = available.isEmpty
+                        ? 'Sin usuarios disponibles para agregar.'
+                        : null;
                   });
-                } catch (_) {
+                } catch (e) {
                   if (!modalContext.mounted || !dialogOpen) return;
-                  setModalState(() => searching = false);
+                  setModalState(() {
+                    searching = false;
+                    searchResults = const <AppUser>[];
+                    searchError = e.toString().replaceFirst('Exception: ', '');
+                  });
                 }
-              }
+              });
+            }
 
-              return AlertDialog(
-                title: const Text('Agregar miembro'),
-                content: SizedBox(
-                  width: 420,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: searchController,
-                        onChanged: runSearch,
-                        decoration: const InputDecoration(
-                          labelText: 'Buscar por nombre o email',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                        ),
+            final dialogWidth =
+                (MediaQuery.of(modalContext).size.width - 32).clamp(
+                  280.0,
+                  420.0,
+                ).toDouble();
+
+            return AlertDialog(
+              title: const Text('Agregar miembro'),
+              content: SizedBox(
+                width: dialogWidth,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: searchController,
+                      onChanged: runSearch,
+                      decoration: const InputDecoration(
+                        labelText: 'Buscar por nombre o email',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(height: 10),
-                      if (searching)
-                        const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: CircularProgressIndicator(),
-                        )
-                      else if (searchController.text.trim().length < 2)
-                        const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('Escribe al menos 2 caracteres.'),
-                        )
-                      else if (searchResults.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('Sin usuarios disponibles para agregar.'),
-                        )
-                      else
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 280),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: searchResults.length,
-                            itemBuilder: (_, index) {
-                              final user = searchResults[index];
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  child: Text(user.initials),
-                                ),
-                                title: Text(user.name),
-                                subtitle: Text(user.email),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.person_add),
-                                  onPressed: () async {
+                    ),
+                    const SizedBox(height: 10),
+                    if (searching)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(),
+                      )
+                    else if (searchError != null)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          searchError!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      )
+                    else if (searchController.text.trim().length < 2)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text('Escribe al menos 2 caracteres.'),
+                      )
+                    else if (searchResults.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text('Sin usuarios disponibles para agregar.'),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 280),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: searchResults.length,
+                          itemBuilder: (_, index) {
+                            final user = searchResults[index];
+                            return ListTile(
+                              leading: CircleAvatar(
+                                child: Text(user.initials),
+                              ),
+                              title: Text(user.name),
+                              subtitle: Text(user.email),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.person_add),
+                                onPressed: () async {
+                                  try {
                                     await widget.apiService.addParticipant(
                                       chatId: widget.chat.id,
                                       userId: user.id,
@@ -690,6 +717,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                                       return;
                                     }
                                     dialogOpen = false;
+                                    searchDebounce?.cancel();
                                     Navigator.of(dialogContext).pop();
                                     await _loadParticipants();
                                     if (!mounted) return;
@@ -700,33 +728,48 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                                         ),
                                       ),
                                     );
-                                  },
-                                ),
-                              );
-                            },
-                          ),
+                                  } catch (e) {
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          e.toString().replaceFirst('Exception: ', ''),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            );
+                          },
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      dialogOpen = false;
-                      Navigator.of(dialogContext).pop();
-                    },
-                    child: const Text('Cerrar'),
-                  ),
-                ],
-              );
-            },
-          ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    dialogOpen = false;
+                    searchDebounce?.cancel();
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: const Text('Cerrar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
-    dialogFuture.whenComplete(() => dialogOpen = false);
+    dialogFuture.whenComplete(() {
+      dialogOpen = false;
+      searchDebounce?.cancel();
+    });
     await dialogFuture;
     searchController.dispose();
   }
