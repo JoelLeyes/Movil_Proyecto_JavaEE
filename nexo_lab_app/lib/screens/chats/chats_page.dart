@@ -27,23 +27,12 @@ class _ChatsPageState extends State<ChatsPage> {
   String _tab = 'all';
   String? _error;
   AppUser? _user;
-
-    void closeDialog([ChatPreview? result]) {
-      if (!dialogOpen) {
-        return;
-      }
-      dialogOpen = false;
-      searchDebounce?.cancel();
-      FocusManager.instance.primaryFocus?.unfocus();
-      Navigator.of(pageContext).pop(result);
-    }
   Timer? _refreshTimer;
   Map<int, ChatPreview> _chatSnapshot = <int, ChatPreview>{};
 
   @override
   void initState() {
     super.initState();
-    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -389,6 +378,16 @@ class _ChatsPageState extends State<ChatsPage> {
     int step = 1;
     Timer? searchDebounce;
     var dialogOpen = true;
+
+    void closeDialog([ChatPreview? result]) {
+      if (!dialogOpen) {
+        return;
+      }
+      dialogOpen = false;
+      searchDebounce?.cancel();
+      FocusManager.instance.primaryFocus?.unfocus();
+      Navigator.of(pageContext, rootNavigator: true).pop(result);
+    }
 
     final created = await showDialog<ChatPreview>(
       context: pageContext,
