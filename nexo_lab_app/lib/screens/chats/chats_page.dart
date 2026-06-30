@@ -380,6 +380,12 @@ class _ChatsPageState extends State<ChatsPage> {
     Timer? searchDebounce;
     var dialogOpen = true;
 
+    void closeDialog([ChatPreview? result]) {
+      dialogOpen = false;
+      searchDebounce?.cancel();
+      Navigator.of(pageContext).pop(result);
+    }
+
     final created = await showDialog<ChatPreview>(
       context: pageContext,
       builder: (dialogContext) {
@@ -411,14 +417,12 @@ class _ChatsPageState extends State<ChatsPage> {
                   }
 
                   final currentUserId = _user?.id;
-                  final available = results
-                      .where((user) {
-                        if (currentUserId != null && user.id == currentUserId) {
-                          return false;
-                        }
-                        return !selected.any((picked) => picked.id == user.id);
-                      })
-                      .toList();
+                  final available = results.where((user) {
+                    if (currentUserId != null && user.id == currentUserId) {
+                      return false;
+                    }
+                    return !selected.any((picked) => picked.id == user.id);
+                  }).toList();
 
                   setModalState(() {
                     searching = false;
@@ -440,7 +444,7 @@ class _ChatsPageState extends State<ChatsPage> {
 
             Widget buildStep1() {
               return Column(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
                     controller: nameController,
@@ -451,18 +455,15 @@ class _ChatsPageState extends State<ChatsPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: nameController.text.trim().length < 2
-                          ? null
-                          : () {
-                              setModalState(() {
-                                step = 2;
-                              });
-                            },
-                      child: const Text('Siguiente'),
-                    ),
+                  FilledButton(
+                    onPressed: nameController.text.trim().length < 2
+                        ? null
+                        : () {
+                            setModalState(() {
+                              step = 2;
+                            });
+                          },
+                    child: const Text('Siguiente'),
                   ),
                 ],
               );
@@ -470,42 +471,34 @@ class _ChatsPageState extends State<ChatsPage> {
 
             Widget buildStep2() {
               return Column(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Miembros seleccionados: ${selected.length}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
+                  Text(
+                    'Miembros seleccionados: ${selected.length}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   if (selected.isNotEmpty)
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
-                      children: selected
-                          .map(
-                            (user) => Chip(
-                              label: Text(user.name),
-                              onDeleted: () {
-                                setModalState(() {
-                                  selected.removeWhere(
-                                    (picked) => picked.id == user.id,
-                                  );
-                                });
-                              },
-                            ),
-                          )
-                          .toList(),
+                      children: selected.map((user) {
+                        return Chip(
+                          label: Text(user.name),
+                          onDeleted: () {
+                            setModalState(() {
+                              selected.removeWhere(
+                                (picked) => picked.id == user.id,
+                              );
+                            });
+                          },
+                        );
+                      }).toList(),
                     )
                   else
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'No agregaste miembros aun.',
-                        style: TextStyle(color: Colors.black54),
-                      ),
+                    const Text(
+                      'No agregaste miembros aun.',
+                      style: TextStyle(color: Colors.black54),
                     ),
                   const SizedBox(height: 10),
                   TextField(
@@ -518,141 +511,177 @@ class _ChatsPageState extends State<ChatsPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  if (searching)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(),
-                    )
-                  else if (searchError != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        searchError!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    )
-                  else if (searchController.text.trim().length < 2)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text('Escribe al menos 2 caracteres para buscar.'),
-                    )
-                  else if (searchResults.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text('No se encontraron usuarios.'),
-                    )
-                  else
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: searchResults.length,
-                        separatorBuilder: (context, index) =>
-                            const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final user = searchResults[index];
-                          return ListTile(
-                            dense: true,
-                            leading: CircleAvatar(
-                              child: Text(user.initials),
-                            ),
-                            title: Text(user.name),
-                            subtitle: Text(user.email),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.add_circle_outline),
-                              onPressed: () {
-                                setModalState(() {
-                                  if (!selected.any((picked) => picked.id == user.id)) {
-                                    selected.add(user);
-                                  }
-                                  searchResults.removeWhere(
-                                    (result) => result.id == user.id,
-                                  );
-                                });
-                              },
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        if (searching) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (searchError != null) {
+                          return Center(
+                            child: Text(
+                              searchError!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.red),
                             ),
                           );
-                        },
-                      ),
+                        }
+                        if (searchController.text.trim().length < 2) {
+                          return const Center(
+                            child: Text('Escribe al menos 2 caracteres para buscar.'),
+                          );
+                        }
+                        if (searchResults.isEmpty) {
+                          return const Center(
+                            child: Text('No se encontraron usuarios.'),
+                          );
+                        }
+
+                        return ListView.separated(
+                          itemCount: searchResults.length,
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final user = searchResults[index];
+                            return ListTile(
+                              dense: true,
+                              leading: CircleAvatar(
+                                child: Text(user.initials),
+                              ),
+                              title: Text(user.name),
+                              subtitle: Text(user.email),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.add_circle_outline),
+                                onPressed: () {
+                                  setModalState(() {
+                                    if (!selected.any((picked) => picked.id == user.id)) {
+                                      selected.add(user);
+                                    }
+                                    searchResults.removeWhere(
+                                      (result) => result.id == user.id,
+                                    );
+                                    searchError = null;
+                                  });
+                                },
+                              ),
+                            );
+                          },
+                        );
+                      },
                     ),
+                  ),
                 ],
               );
             }
 
-            final dialogWidth =
-                (MediaQuery.of(modalContext).size.width - 32).clamp(
-                  280.0,
-                  460.0,
-                ).toDouble();
+            final screenSize = MediaQuery.of(modalContext).size;
+            final dialogWidth = (screenSize.width - 32).clamp(280.0, 460.0).toDouble();
+            final dialogHeight = (screenSize.height * 0.78).clamp(360.0, 620.0).toDouble();
 
-            return AlertDialog(
-              scrollable: true,
+            return Dialog(
               insetPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 24,
               ),
-              title: const Text('Nuevo grupo'),
-              content: SizedBox(
+              child: SizedBox(
                 width: dialogWidth,
-                child: step == 1 ? buildStep1() : buildStep2(),
-              ),
-              actions: [
-                if (step == 2)
-                  TextButton(
-                    onPressed: () {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      setModalState(() {
-                        step = 1;
-                        searchResults = const <AppUser>[];
-                        searching = false;
-                        searchError = null;
-                      });
-                    },
-                    child: const Text('Atras'),
+                height: dialogHeight,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Nuevo grupo',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              FocusManager.instance.primaryFocus?.unfocus();
+                              closeDialog();
+                            },
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        step == 1 ? 'Paso 1 de 2' : 'Paso 2 de 2',
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: step == 1 ? buildStep1() : buildStep2(),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (step == 2)
+                            TextButton(
+                              onPressed: () {
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                setModalState(() {
+                                  step = 1;
+                                  searchResults = const <AppUser>[];
+                                  searching = false;
+                                  searchError = null;
+                                });
+                              },
+                              child: const Text('Atrás'),
+                            ),
+                          TextButton(
+                            onPressed: () {
+                              FocusManager.instance.primaryFocus?.unfocus();
+                              closeDialog();
+                            },
+                            child: const Text('Cancelar'),
+                          ),
+                          if (step == 2)
+                            FilledButton(
+                              onPressed: selected.isEmpty
+                                  ? null
+                                  : () async {
+                                      FocusManager.instance.primaryFocus?.unfocus();
+                                      try {
+                                        final chat = await _apiService.createGroupChat(
+                                          name: nameController.text.trim(),
+                                          memberIds: selected.map((user) => user.id).toList(),
+                                        );
+                                        if (!modalContext.mounted || !dialogOpen) {
+                                          return;
+                                        }
+                                        closeDialog(chat);
+                                      } catch (e) {
+                                        if (!mounted) {
+                                          return;
+                                        }
+                                        ScaffoldMessenger.of(pageContext).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              e.toString().replaceFirst('Exception: ', ''),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                              child: const Text('Crear grupo'),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
-                TextButton(
-                  onPressed: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    dialogOpen = false;
-                    searchDebounce?.cancel();
-                    Navigator.of(dialogContext).pop();
-                  },
-                  child: const Text('Cancelar'),
                 ),
-                if (step == 2)
-                  FilledButton(
-                    onPressed: selected.isEmpty
-                        ? null
-                        : () async {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            try {
-                              final chat = await _apiService.createGroupChat(
-                                name: nameController.text.trim(),
-                                memberIds: selected.map((user) => user.id).toList(),
-                              );
-                              if (!modalContext.mounted || !dialogOpen) {
-                                return;
-                              }
-                              dialogOpen = false;
-                              searchDebounce?.cancel();
-                              Navigator.of(dialogContext).pop(chat);
-                            } catch (e) {
-                              if (!mounted) {
-                                return;
-                              }
-                              ScaffoldMessenger.of(pageContext).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    e.toString().replaceFirst('Exception: ', ''),
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                    child: const Text('Crear grupo'),
-                  ),
-              ],
+              ),
             );
           },
         );
@@ -660,7 +689,6 @@ class _ChatsPageState extends State<ChatsPage> {
     );
 
     searchDebounce?.cancel();
-    dialogOpen = false;
     nameController.dispose();
     searchController.dispose();
 
