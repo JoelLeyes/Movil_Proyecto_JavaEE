@@ -596,44 +596,44 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     final dialogFuture = showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (modalContext, setModalState) {
-            Future<void> runSearch(String raw) async {
-              final query = raw.trim();
-              if (query.length < 2) {
-                setModalState(() {
-                  searchResults = const <AppUser>[];
-                  searching = false;
-                });
-                return;
-              }
-              setModalState(() => searching = true);
-              try {
-                final results = await widget.apiService.searchUsers(query);
-                if (!modalContext.mounted || !dialogOpen) return;
-                final currentIds = _participants.map((p) => p.id).toSet();
-                setModalState(() {
-                  searching = false;
-                  searchResults = results
-                      .where((u) => !currentIds.contains(u.id))
-                      .toList();
-                });
-              } catch (_) {
-                if (!modalContext.mounted || !dialogOpen) return;
-                setModalState(() => searching = false);
-              }
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) {
+              FocusManager.instance.primaryFocus?.unfocus();
+              dialogOpen = false;
+              Navigator.of(dialogContext).pop();
             }
-
-            return PopScope(
-              canPop: false,
-              onPopInvokedWithResult: (didPop, _) {
-                if (!didPop) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  dialogOpen = false;
-                  Navigator.of(dialogContext).pop();
+          },
+          child: StatefulBuilder(
+            builder: (modalContext, setModalState) {
+              Future<void> runSearch(String raw) async {
+                final query = raw.trim();
+                if (query.length < 2) {
+                  setModalState(() {
+                    searchResults = const <AppUser>[];
+                    searching = false;
+                  });
+                  return;
                 }
-              },
-              child: AlertDialog(
+                setModalState(() => searching = true);
+                try {
+                  final results = await widget.apiService.searchUsers(query);
+                  if (!modalContext.mounted || !dialogOpen) return;
+                  final currentIds = _participants.map((p) => p.id).toSet();
+                  setModalState(() {
+                    searching = false;
+                    searchResults = results
+                        .where((u) => !currentIds.contains(u.id))
+                        .toList();
+                  });
+                } catch (_) {
+                  if (!modalContext.mounted || !dialogOpen) return;
+                  setModalState(() => searching = false);
+                }
+              }
+
+              return AlertDialog(
                 title: const Text('Agregar miembro'),
                 content: SizedBox(
                   width: 420,
@@ -719,9 +719,9 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     child: const Text('Cerrar'),
                   ),
                 ],
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );

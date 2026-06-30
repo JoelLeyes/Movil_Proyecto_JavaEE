@@ -317,184 +317,186 @@ class _ChatsPageState extends State<ChatsPage> {
     final dialogFuture = showDialog<ChatPreview>(
       context: pageContext,
       builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (modalContext, setModalState) {
-            Future<void> runSearch(String raw) async {
-              final query = raw.trim().toLowerCase();
-              if (query.length < 2) {
-                setModalState(() {
-                  searchResults = const <AppUser>[];
-                  searching = false;
-                });
-                return;
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) {
+              FocusManager.instance.primaryFocus?.unfocus();
+              dialogOpen = false;
+              Navigator.of(dialogContext).pop();
+            }
+          },
+          child: StatefulBuilder(
+            builder: (modalContext, setModalState) {
+              Future<void> runSearch(String raw) async {
+                final query = raw.trim().toLowerCase();
+                if (query.length < 2) {
+                  setModalState(() {
+                    searchResults = const <AppUser>[];
+                    searching = false;
+                  });
+                  return;
+                }
+
+                setModalState(() => searching = true);
+                try {
+                  final results = await _apiService.searchUsers(query);
+                  if (!modalContext.mounted || !dialogOpen) return;
+                  setModalState(() {
+                    searching = false;
+                    searchResults = results
+                        .where(
+                          (user) => !selected.any((picked) => picked.id == user.id),
+                        )
+                        .toList();
+                  });
+                } catch (_) {
+                  if (!modalContext.mounted || !dialogOpen) return;
+                  setModalState(() => searching = false);
+                }
               }
 
-              setModalState(() => searching = true);
-              try {
-                final results = await _apiService.searchUsers(query);
-                if (!modalContext.mounted || !dialogOpen) return;
-                setModalState(() {
-                  searching = false;
-                  searchResults = results
-                      .where(
-                        (user) => !selected.any((picked) => picked.id == user.id),
-                      )
-                      .toList();
-                });
-              } catch (_) {
-                if (!modalContext.mounted || !dialogOpen) return;
-                setModalState(() => searching = false);
-              }
-            }
-
-            Widget buildStep1() {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre del grupo',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () {
-                        if (nameController.text.trim().length < 2) {
-                          ScaffoldMessenger.of(pageContext).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'El nombre debe tener al menos 2 caracteres.',
-                              ),
-                            ),
-                          );
-                          return;
-                        }
-                        setModalState(() => step = 2);
-                      },
-                      child: const Text('Siguiente'),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            Widget buildStep2() {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Miembros seleccionados: ${selected.length}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (selected.isNotEmpty)
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: selected
-                          .map(
-                            (user) => Chip(
-                              label: Text(user.name),
-                              onDeleted: () {
-                                setModalState(() {
-                                  selected.removeWhere((picked) => picked.id == user.id);
-                                  searchResults = searchResults
-                                      .where(
-                                        (result) => !selected.any(
-                                          (picked) => picked.id == result.id,
-                                        ),
-                                      )
-                                      .toList();
-                                });
-                              },
-                            ),
-                          )
-                          .toList(),
-                    )
-                  else
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'No agregaste miembros aun.',
-                        style: TextStyle(color: Colors.black54),
+              Widget buildStep1() {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre del grupo',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: searchController,
-                    onChanged: runSearch,
-                    decoration: const InputDecoration(
-                      labelText: 'Buscar usuarios',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          if (nameController.text.trim().length < 2) {
+                            ScaffoldMessenger.of(pageContext).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'El nombre debe tener al menos 2 caracteres.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+                          setModalState(() => step = 2);
+                        },
+                        child: const Text('Siguiente'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (searching)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(),
-                    )
-                  else
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      child: searchResults.isEmpty
-                          ? const Center(
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 14),
-                                child: Text('Escribe para buscar miembros.'),
+                  ],
+                );
+              }
+
+              Widget buildStep2() {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Miembros seleccionados: ${selected.length}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (selected.isNotEmpty)
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: selected
+                            .map(
+                              (user) => Chip(
+                                label: Text(user.name),
+                                onDeleted: () {
+                                  setModalState(() {
+                                    selected.removeWhere(
+                                      (picked) => picked.id == user.id,
+                                    );
+                                    searchResults = searchResults
+                                        .where(
+                                          (result) => !selected.any(
+                                            (picked) => picked.id == result.id,
+                                          ),
+                                        )
+                                        .toList();
+                                  });
+                                },
                               ),
                             )
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: searchResults.length,
-                              itemBuilder: (context, index) {
-                                final user = searchResults[index];
-                                return ListTile(
-                                  dense: true,
-                                  leading: CircleAvatar(
-                                    child: Text(user.initials),
-                                  ),
-                                  title: Text(user.name),
-                                  subtitle: Text(user.email),
-                                  trailing: IconButton(
-                                    icon: const Icon(
-                                      Icons.add_circle_outline,
-                                    ),
-                                    onPressed: () {
-                                      setModalState(() {
-                                        selected.add(user);
-                                        searchResults.removeWhere(
-                                          (result) => result.id == user.id,
-                                        );
-                                      });
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
+                            .toList(),
+                      )
+                    else
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'No agregaste miembros aun.',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: searchController,
+                      onChanged: runSearch,
+                      decoration: const InputDecoration(
+                        labelText: 'Buscar usuarios',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                      ),
                     ),
-                ],
-              );
-            }
+                    const SizedBox(height: 8),
+                    if (searching)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        child: searchResults.isEmpty
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 14),
+                                  child: Text('Escribe para buscar miembros.'),
+                                ),
+                              )
+                            : ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: searchResults.length,
+                                itemBuilder: (context, index) {
+                                  final user = searchResults[index];
+                                  return ListTile(
+                                    dense: true,
+                                    leading: CircleAvatar(
+                                      child: Text(user.initials),
+                                    ),
+                                    title: Text(user.name),
+                                    subtitle: Text(user.email),
+                                    trailing: IconButton(
+                                      icon: const Icon(
+                                        Icons.add_circle_outline,
+                                      ),
+                                      onPressed: () {
+                                        setModalState(() {
+                                          selected.add(user);
+                                          searchResults.removeWhere(
+                                            (result) => result.id == user.id,
+                                          );
+                                        });
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                  ],
+                );
+              }
 
-            return PopScope(
-              canPop: false,
-              onPopInvokedWithResult: (didPop, _) {
-                if (!didPop) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  dialogOpen = false;
-                  Navigator.of(dialogContext).pop();
-                }
-              },
-              child: AlertDialog(
+              return AlertDialog(
                 scrollable: true,
                 insetPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -543,9 +545,9 @@ class _ChatsPageState extends State<ChatsPage> {
                       child: const Text('Crear grupo'),
                     ),
                 ],
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
