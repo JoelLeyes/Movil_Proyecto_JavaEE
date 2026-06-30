@@ -184,6 +184,16 @@ class _ChatsPageState extends State<ChatsPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (modalContext, setModalState) {
+            void closeDialog([ChatPreview? result]) {
+              if (!dialogOpen) {
+                return;
+              }
+              dialogOpen = false;
+              searchDebounce?.cancel();
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.of(dialogContext).pop(result);
+            }
+
             Future<void> runSearch(String raw) async {
               final query = raw.trim();
               searchDebounce?.cancel();
@@ -380,12 +390,6 @@ class _ChatsPageState extends State<ChatsPage> {
     Timer? searchDebounce;
     var dialogOpen = true;
 
-    void closeDialog([ChatPreview? result]) {
-      dialogOpen = false;
-      searchDebounce?.cancel();
-      Navigator.of(pageContext).pop(result);
-    }
-
     final created = await showDialog<ChatPreview>(
       context: pageContext,
       builder: (dialogContext) {
@@ -580,105 +584,108 @@ class _ChatsPageState extends State<ChatsPage> {
             final dialogWidth = (screenSize.width - 32).clamp(280.0, 460.0).toDouble();
             final dialogHeight = (screenSize.height * 0.78).clamp(360.0, 620.0).toDouble();
 
-            return Dialog(
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 24,
-              ),
-              child: SizedBox(
-                width: dialogWidth,
-                height: dialogHeight,
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Nuevo grupo',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
+            return PopScope(
+              canPop: false,
+              onPopInvoked: (didPop) {
+                if (didPop) {
+                  return;
+                }
+                closeDialog();
+              },
+              child: Dialog(
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 24,
+                ),
+                child: SizedBox(
+                  width: dialogWidth,
+                  height: dialogHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Nuevo grupo',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              FocusManager.instance.primaryFocus?.unfocus();
-                              closeDialog();
-                            },
-                            icon: const Icon(Icons.close),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        step == 1 ? 'Paso 1 de 2' : 'Paso 2 de 2',
-                        style: const TextStyle(color: Colors.black54),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: step == 1 ? buildStep1() : buildStep2(),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          if (step == 2)
+                            IconButton(
+                              onPressed: closeDialog,
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          step == 1 ? 'Paso 1 de 2' : 'Paso 2 de 2',
+                          style: const TextStyle(color: Colors.black54),
+                        ),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: step == 1 ? buildStep1() : buildStep2(),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (step == 2)
+                              TextButton(
+                                onPressed: () {
+                                  FocusManager.instance.primaryFocus?.unfocus();
+                                  setModalState(() {
+                                    step = 1;
+                                    searchResults = const <AppUser>[];
+                                    searching = false;
+                                    searchError = null;
+                                  });
+                                },
+                                child: const Text('Atrás'),
+                              ),
                             TextButton(
-                              onPressed: () {
-                                FocusManager.instance.primaryFocus?.unfocus();
-                                setModalState(() {
-                                  step = 1;
-                                  searchResults = const <AppUser>[];
-                                  searching = false;
-                                  searchError = null;
-                                });
-                              },
-                              child: const Text('Atrás'),
+                              onPressed: closeDialog,
+                              child: const Text('Cancelar'),
                             ),
-                          TextButton(
-                            onPressed: () {
-                              FocusManager.instance.primaryFocus?.unfocus();
-                              closeDialog();
-                            },
-                            child: const Text('Cancelar'),
-                          ),
-                          if (step == 2)
-                            FilledButton(
-                              onPressed: selected.isEmpty
-                                  ? null
-                                  : () async {
-                                      FocusManager.instance.primaryFocus?.unfocus();
-                                      try {
-                                        final chat = await _apiService.createGroupChat(
-                                          name: nameController.text.trim(),
-                                          memberIds: selected.map((user) => user.id).toList(),
-                                        );
-                                        if (!modalContext.mounted || !dialogOpen) {
-                                          return;
-                                        }
-                                        closeDialog(chat);
-                                      } catch (e) {
-                                        if (!mounted) {
-                                          return;
-                                        }
-                                        ScaffoldMessenger.of(pageContext).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              e.toString().replaceFirst('Exception: ', ''),
+                            if (step == 2)
+                              FilledButton(
+                                onPressed: selected.isEmpty
+                                    ? null
+                                    : () async {
+                                        FocusManager.instance.primaryFocus?.unfocus();
+                                        try {
+                                          final chat = await _apiService.createGroupChat(
+                                            name: nameController.text.trim(),
+                                            memberIds: selected.map((user) => user.id).toList(),
+                                          );
+                                          if (!modalContext.mounted || !dialogOpen) {
+                                            return;
+                                          }
+                                          closeDialog(chat);
+                                        } catch (e) {
+                                          if (!mounted) {
+                                            return;
+                                          }
+                                          ScaffoldMessenger.of(pageContext).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                e.toString().replaceFirst('Exception: ', ''),
+                                              ),
                                             ),
-                                          ),
-                                        );
-                                      }
-                                    },
-                              child: const Text('Crear grupo'),
-                            ),
-                        ],
-                      ),
-                    ],
+                                          );
+                                        }
+                                      },
+                                child: const Text('Crear grupo'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
