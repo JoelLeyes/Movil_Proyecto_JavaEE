@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -49,13 +50,36 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
   List<ChatParticipant> _participants = const <ChatParticipant>[];
   bool _isAdmin = false;
+  String? _chatPhotoUrl;
 
   @override
   void initState() {
     super.initState();
     _chatName = widget.chat.name;
+    _chatPhotoUrl = widget.chat.avatarUrl;
     _loadInitial();
     _startPolling();
+  }
+
+  Widget _buildAvatar({required String name, String? photoUrl, double radius = 20}) {
+    final resolved = resolvePhotoUrl(photoUrl);
+    if (resolved == null) {
+      return CircleAvatar(radius: radius, child: Text(initials(name)));
+    }
+
+    return ClipOval(
+      child: SizedBox(
+        width: radius * 2,
+        height: radius * 2,
+        child: Image.network(
+          resolved,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) {
+            return CircleAvatar(radius: radius, child: Text(initials(name)));
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -380,6 +404,59 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     );
   }
 
+  Future<void> _changeGroupPhoto() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      type: FileType.image,
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+
+    final file = result.files.single;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo leer la foto seleccionada.')),
+      );
+      return;
+    }
+
+    try {
+      final photoUrl = await widget.apiService.uploadGroupPhoto(
+        chatId: widget.chat.id,
+        photo: UploadFilePayload(
+          fileName: file.name,
+          bytes: bytes,
+          mimeType: file.extension == null ? null : 'image/${file.extension}',
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _chatPhotoUrl = photoUrl.isEmpty ? null : photoUrl;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto del grupo actualizada.')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    }
+  }
+
   Future<void> _openMessageActions(ChatMessage message) async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -569,7 +646,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     itemBuilder: (context, index) {
                       final p = _participants[index];
                       return ListTile(
-                        leading: CircleAvatar(child: Text(initials(p.name))),
+                        leading: _buildAvatar(
+                          name: p.name,
+                          photoUrl: p.avatarUrl,
+                          radius: 20,
+                        ),
                         title: Text(p.name),
                         subtitle: Text(p.email),
                         trailing: p.isAdmin
@@ -700,8 +781,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                           itemBuilder: (_, index) {
                             final user = searchResults[index];
                             return ListTile(
-                              leading: CircleAvatar(
-                                child: Text(user.initials),
+                              leading: _buildAvatar(
+                                name: user.name,
+                                photoUrl: user.fotoPerfilUrl,
+                                radius: 20,
                               ),
                               title: Text(user.name),
                               subtitle: Text(user.email),
@@ -883,17 +966,38 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final headerPhoto = _chatPhotoUrl;
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        titleSpacing: 0,
+        title: Row(
           children: [
-            Text(_chatName),
-            Text(
-              widget.chat.isGroup
-                  ? '${_participants.isEmpty ? '' : '${_participants.length} participantes · '}Chat grupal'
-                  : 'Chat directo',
-              style: Theme.of(context).textTheme.bodySmall,
+            _buildAvatar(
+              name: _chatName,
+              photoUrl: headerPhoto,
+              radius: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _chatName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    widget.chat.isGroup
+                        ? '${_participants.isEmpty ? '' : '${_participants.length} participantes · '}Chat grupal'
+                        : 'Chat directo',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -910,6 +1014,9 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 }
                 if (value == 'rename') {
                   await _renameGroup();
+                }
+                if (value == 'photo') {
+                  await _changeGroupPhoto();
                 }
                 if (value == 'leave') {
                   await _leaveGroup();
@@ -929,6 +1036,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   const PopupMenuItem(
                     value: 'rename',
                     child: Text('Renombrar grupo'),
+                  ),
+                if (_isAdmin)
+                  const PopupMenuItem(
+                    value: 'photo',
+                    child: Text('Cambiar foto del grupo'),
                   ),
                 const PopupMenuItem(
                   value: 'leave',

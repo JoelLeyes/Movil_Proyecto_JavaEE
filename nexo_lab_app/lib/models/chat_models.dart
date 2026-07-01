@@ -136,14 +136,17 @@ class ChatParticipant {
     required this.name,
     required this.email,
     required this.role,
+    this.fotoPerfilUrl,
   });
 
   final int id;
   final String name;
   final String email;
   final String role;
+  final String? fotoPerfilUrl;
 
   bool get isAdmin => role.toUpperCase() == 'ADMINISTRADOR';
+  String? get avatarUrl => fotoPerfilUrl;
 
   factory ChatParticipant.fromJson(Map<String, dynamic> json) {
     final nombre = json['nombre']?.toString().trim() ?? '';
@@ -157,6 +160,8 @@ class ChatParticipant {
           : (json['name']?.toString() ?? 'Usuario'),
       email: json['email']?.toString() ?? '',
       role: json['rol']?.toString() ?? json['role']?.toString() ?? 'MIEMBRO',
+      fotoPerfilUrl:
+          json['fotoPerfilUrl']?.toString() ?? json['photoUrl']?.toString(),
     );
   }
 }
@@ -169,6 +174,8 @@ class ChatPreview {
     required this.lastMessage,
     required this.lastMessageAt,
     required this.unreadCount,
+    this.fotoPerfilUrl,
+    this.fotoGrupoUrl,
   });
 
   final int id;
@@ -177,8 +184,33 @@ class ChatPreview {
   final String lastMessage;
   final DateTime? lastMessageAt;
   final int unreadCount;
+  final String? fotoPerfilUrl;
+  final String? fotoGrupoUrl;
 
   bool get isGroup => type.toUpperCase() == 'GROUP';
+  String? get avatarUrl => isGroup ? fotoGrupoUrl : fotoPerfilUrl;
+
+  ChatPreview copyWith({
+    int? id,
+    String? name,
+    String? type,
+    String? lastMessage,
+    DateTime? lastMessageAt,
+    int? unreadCount,
+    String? fotoPerfilUrl,
+    String? fotoGrupoUrl,
+  }) {
+    return ChatPreview(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      lastMessage: lastMessage ?? this.lastMessage,
+      lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      unreadCount: unreadCount ?? this.unreadCount,
+      fotoPerfilUrl: fotoPerfilUrl ?? this.fotoPerfilUrl,
+      fotoGrupoUrl: fotoGrupoUrl ?? this.fotoGrupoUrl,
+    );
+  }
 
   factory ChatPreview.fromJson(Map<String, dynamic> json) {
     final rawDate =
@@ -221,6 +253,10 @@ class ChatPreview {
           toIntValue(json['mensajesSinLeer']) ??
           toIntValue(json['unread']) ??
           0,
+      fotoPerfilUrl:
+          json['fotoPerfilUrl']?.toString() ??
+          json['photoUrl']?.toString(),
+      fotoGrupoUrl: json['fotoGrupoUrl']?.toString(),
     );
   }
 }

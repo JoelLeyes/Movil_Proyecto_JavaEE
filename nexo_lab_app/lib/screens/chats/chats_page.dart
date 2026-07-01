@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/chat_models.dart';
@@ -29,6 +31,37 @@ class _ChatsPageState extends State<ChatsPage> {
   AppUser? _user;
   Timer? _refreshTimer;
   Map<int, ChatPreview> _chatSnapshot = <int, ChatPreview>{};
+
+  Widget _buildAvatar({
+    required String name,
+    String? photoUrl,
+    double radius = 24,
+  }) {
+    final resolved = resolvePhotoUrl(photoUrl);
+    if (resolved == null) {
+      return CircleAvatar(
+        radius: radius,
+        child: Text(initials(name)),
+      );
+    }
+
+    return ClipOval(
+      child: SizedBox(
+        width: radius * 2,
+        height: radius * 2,
+        child: Image.network(
+          resolved,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) {
+            return CircleAvatar(
+              radius: radius,
+              child: Text(initials(name)),
+            );
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -296,7 +329,11 @@ class _ChatsPageState extends State<ChatsPage> {
                           itemBuilder: (context, index) {
                             final user = searchResults[index];
                             return ListTile(
-                              leading: CircleAvatar(child: Text(user.initials)),
+                                              leading: _buildAvatar(
+                                                name: user.name,
+                                                photoUrl: user.fotoPerfilUrl,
+                                                radius: 20,
+                                              ),
                               title: Text(user.name),
                               subtitle: Text(user.email),
                               onTap: () async {
@@ -374,6 +411,7 @@ class _ChatsPageState extends State<ChatsPage> {
     final nameController = TextEditingController();
     final searchController = TextEditingController();
     final selected = <AppUser>[];
+    UploadFilePayload? groupPhoto;
     List<AppUser> searchResults = const <AppUser>[];
     bool searching = false;
     String? searchError;
@@ -414,6 +452,97 @@ class _ChatsPageState extends State<ChatsPage> {
                 searchError = null;
               });
 
+
+            Future<void> pickGroupPhoto(StateSetter setModalState) async {
+              final result = await FilePicker.platform.pickFiles(
+                allowMultiple: false,
+                type: FileType.image,
+                withData: true,
+              );
+
+              if (!dialogOpen || result == null || result.files.isEmpty) {
+                return;
+              }
+
+              final file = result.files.single;
+              final bytes = file.bytes;
+              if (bytes == null || bytes.isEmpty) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No se pudo leer la foto seleccionada.')),
+                  );
+                }
+                return;
+              }
+
+              setModalState(() {
+                groupPhoto = UploadFilePayload(
+                  fileName: file.name,
+                  bytes: bytes,
+                  mimeType: file.extension == null ? null : 'image/${file.extension}',
+                );
+              });
+            }
+
+            void clearGroupPhoto(StateSetter setModalState) {
+              setModalState(() {
+                groupPhoto = null;
+              });
+            }
+            Widget buildGroupPhotoPicker() {
+              final hasPhoto = groupPhoto != null;
+              return InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => pickGroupPhoto(setModalState),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(16),
+                    color: Theme.of(context).colorScheme.surface,
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                        foregroundImage: hasPhoto
+                            ? MemoryImage(Uint8List.fromList(groupPhoto!.bytes))
+                            : null,
+                        child: hasPhoto ? null : const Icon(Icons.image_outlined),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Foto del grupo',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              hasPhoto
+                                  ? groupPhoto!.fileName
+                                  : 'Opcional. Elegí una imagen para identificar el grupo.',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => hasPhoto
+                            ? clearGroupPhoto(setModalState)
+                            : pickGroupPhoto(setModalState),
+                        child: Text(hasPhoto ? 'Quitar' : 'Elegir foto'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
               searchDebounce = Timer(const Duration(milliseconds: 350), () async {
                 try {
                   final results = await _apiService.searchUsers(query);
@@ -552,8 +681,10 @@ class _ChatsPageState extends State<ChatsPage> {
                             final user = searchResults[index];
                             return ListTile(
                               dense: true,
-                              leading: CircleAvatar(
-                                child: Text(user.initials),
+                              leading: _buildAvatar(
+                                name: user.name,
+                                photoUrl: user.fotoPerfilUrl,
+                                radius: 20,
                               ),
                               title: Text(user.name),
                               subtitle: Text(user.email),
@@ -624,6 +755,8 @@ class _ChatsPageState extends State<ChatsPage> {
                           ],
                         ),
                         const SizedBox(height: 12),
+                        buildGroupPhotoPicker(),
+                        const SizedBox(height: 12),
                         Text(
                           step == 1 ? 'Paso 1 de 2' : 'Paso 2 de 2',
                           style: const TextStyle(color: Colors.black54),
@@ -650,7 +783,7 @@ class _ChatsPageState extends State<ChatsPage> {
                                 child: const Text('Atrás'),
                               ),
                             TextButton(
-                              onPressed: closeDialog,
+                              onPressed: () => closeDialog(),
                               child: const Text('Cancelar'),
                             ),
                             if (step == 2)
@@ -664,10 +797,26 @@ class _ChatsPageState extends State<ChatsPage> {
                                             name: nameController.text.trim(),
                                             memberIds: selected.map((user) => user.id).toList(),
                                           );
+                                          ChatPreview createdChat = chat;
+                                          if (groupPhoto != null) {
+                                            try {
+                                              final photoUrl = await _apiService.uploadGroupPhoto(
+                                                chatId: chat.id,
+                                                photo: groupPhoto!,
+                                              );
+                                              if (photoUrl.isNotEmpty) {
+                                                createdChat = chat.copyWith(
+                                                  fotoGrupoUrl: photoUrl,
+                                                );
+                                              }
+                                            } catch (_) {
+                                              // El grupo ya quedó creado; la foto se puede cambiar después.
+                                            }
+                                          }
                                           if (!modalContext.mounted || !dialogOpen) {
                                             return;
                                           }
-                                          closeDialog(chat);
+                                          closeDialog(createdChat);
                                         } catch (e) {
                                           if (!mounted) {
                                             return;
@@ -744,11 +893,16 @@ class _ChatsPageState extends State<ChatsPage> {
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Center(
                 child: CircleAvatar(
-                  radius: 16,
-                  child: Text(
-                    _user!.initials,
-                    style: const TextStyle(fontSize: 11),
-                  ),
+                          radius: 16,
+                          foregroundImage: resolvePhotoUrl(_user!.fotoPerfilUrl) == null
+                              ? null
+                              : NetworkImage(resolvePhotoUrl(_user!.fotoPerfilUrl)!),
+                          child: resolvePhotoUrl(_user!.fotoPerfilUrl) == null
+                              ? Text(
+                                  _user!.initials,
+                                  style: const TextStyle(fontSize: 11),
+                                )
+                              : null,
                 ),
               ),
             ),
@@ -812,9 +966,12 @@ class _ChatsPageState extends State<ChatsPage> {
                           const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final chat = _filteredChats[index];
+                        final avatarUrl = resolvePhotoUrl(chat.avatarUrl);
                         return ListTile(
-                          leading: CircleAvatar(
-                            child: Text(initials(chat.name)),
+                          leading: _buildAvatar(
+                            name: chat.name,
+                            photoUrl: avatarUrl,
+                            radius: 24,
                           ),
                           title: Row(
                             children: [
@@ -850,7 +1007,11 @@ class _ChatsPageState extends State<ChatsPage> {
                                   chat: chat,
                                 ),
                               ),
-                            );
+                            ).then((_) {
+                              if (mounted) {
+                                unawaited(_loadChats(silent: true));
+                              }
+                            });
                           },
                         );
                       },

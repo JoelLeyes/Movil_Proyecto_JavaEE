@@ -3,6 +3,38 @@ String toBackendLocalIso(DateTime dt) {
   return local.split('.').first;
 }
 
+String? resolvePhotoUrl(String? rawUrl) {
+  final value = rawUrl?.trim() ?? '';
+  if (value.isEmpty) {
+    return null;
+  }
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    return value;
+  }
+
+  final apiBase = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://nexolab.cloud-ip.cc/api',
+  ).trim();
+  final baseUri = Uri.parse(apiBase.isEmpty ? 'https://nexolab.cloud-ip.cc/api' : apiBase);
+  final origin = '${baseUri.scheme}://${baseUri.authority}';
+
+  if (value.startsWith('/api/')) {
+    return '$origin$value';
+  }
+  if (value.startsWith('api/')) {
+    return '$origin/$value';
+  }
+  if (value.startsWith('/uploads/')) {
+    return '$origin/api$value';
+  }
+  if (value.startsWith('uploads/')) {
+    return '$origin/api/$value';
+  }
+
+  return value;
+}
+
 String initials(String name) {
   final parts = name.trim().split(RegExp(r'\s+'));
   if (parts.length >= 2) {

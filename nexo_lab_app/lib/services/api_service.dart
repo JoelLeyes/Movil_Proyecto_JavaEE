@@ -371,6 +371,39 @@ class ApiService {
     }
   }
 
+  Future<String> uploadGroupPhoto({
+    required int chatId,
+    required UploadFilePayload photo,
+  }) async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('No hay sesion activa.');
+      }
+
+      final response = await _authorizedMultipartRequestWithFallback(
+        method: 'POST',
+        path: '/chats/$chatId/foto',
+        token: token,
+        fields: const <String, String>{},
+        files: <UploadFilePayload>[photo],
+        fileFieldName: 'foto',
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final body = decodeBody(response.body);
+        throw Exception(
+          body['message']?.toString() ?? 'No se pudo actualizar la foto del grupo.',
+        );
+      }
+
+      final decoded = decodeBody(response.body);
+      return decoded['fotoGrupoUrl']?.toString() ?? '';
+    } catch (e) {
+      throw _asApiException(e);
+    }
+  }
+
   Future<List<ChatParticipant>> getParticipants({required int chatId}) async {
     try {
       final token = await _authService.getToken();
