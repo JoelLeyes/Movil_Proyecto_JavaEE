@@ -372,7 +372,9 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         );
       },
     );
-    controller.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.microtask(() => controller.dispose());
+    });
 
     if (result == null || result.isEmpty) {
       return;
@@ -655,7 +657,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Future<void> _openAddParticipant() async {
-    final searchController = TextEditingController();
+    String searchQuery = '';
     List<AppUser> searchResults = const <AppUser>[];
     bool searching = false;
     String? searchError;
@@ -669,6 +671,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           builder: (modalContext, setModalState) {
             Future<void> runSearch(String raw) async {
               final query = raw.trim();
+              searchQuery = raw;
               searchDebounce?.cancel();
 
               if (query.length < 2) {
@@ -724,8 +727,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(
-                      controller: searchController,
+                    TextFormField(
+                      initialValue: searchQuery,
                       onChanged: runSearch,
                       decoration: const InputDecoration(
                         labelText: 'Buscar por nombre o email',
@@ -748,7 +751,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                           style: const TextStyle(color: Colors.red),
                         ),
                       )
-                    else if (searchController.text.trim().length < 2)
+                    else if (searchQuery.trim().length < 2)
                       const Padding(
                         padding: EdgeInsets.all(12),
                         child: Text('Escribe al menos 2 caracteres.'),
@@ -835,12 +838,9 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       },
     );
 
-    dialogFuture.whenComplete(() {
-      dialogOpen = false;
-      searchDebounce?.cancel();
-    });
     await dialogFuture;
-    searchController.dispose();
+    dialogOpen = false;
+    searchDebounce?.cancel();
   }
 
   Future<void> _leaveGroup() async {

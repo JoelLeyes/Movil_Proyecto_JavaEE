@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/chat_models.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import '../../utils/formatters.dart';
 import '../auth/welcome_page.dart';
 import '../profile/profile_page.dart';
@@ -29,7 +31,6 @@ class _ChatsPageState extends State<ChatsPage> {
   String _tab = 'all';
   String? _error;
   AppUser? _user;
-  Timer? _refreshTimer;
   Map<int, ChatPreview> _chatSnapshot = <int, ChatPreview>{};
 
   Widget _buildAvatar({
@@ -49,11 +50,43 @@ class _ChatsPageState extends State<ChatsPage> {
     super.initState();
     _apiService = ApiService(widget.authService);
     unawaited(_bootstrap());
+    _registerMessageHandlers();
   }
 
   Future<void> _bootstrap() async {
     _user = await widget.authService.getCurrentUser();
+    unawaited(widget.authService.syncDevicePushToken());
     await _loadChats();
+  }
+
+  void _registerMessageHandlers() {
+    FirebaseMessaging.onMessage.listen((message) {
+      NotificationService.showNotification(message);
+    });
+
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      if (!mounted) {
+        return;
+      }
+
+      final chatId = message.data['chatId'];
+      if (chatId != null) {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => ChatDetailPage(
+            apiService: _apiService,
+            authService: widget.authService,
+            chat: ChatPreview(
+              id: int.tryParse(chatId.toString()) ?? 0,
+              name: message.data['chatName']?.toString() ?? 'Chat',
+              type: message.data['isGroup'] == 'true' ? 'GROUP' : 'PRIVATE',
+              lastMessage: message.notification?.body ?? '',
+              lastMessageAt: DateTime.now(),
+              unreadCount: 0,
+            ),
+          ),
+        ));
+      }
+    });
   }
 
   Future<void> _loadChats({bool silent = false}) async {
@@ -177,7 +210,7 @@ class _ChatsPageState extends State<ChatsPage> {
 
   Future<void> _openCreatePrivateChatDialog() async {
     final pageContext = context;
-    final searchController = TextEditingController();
+    String searchQuery = '';
     List<AppUser> searchResults = const <AppUser>[];
     bool searching = false;
     String? searchError;
@@ -200,6 +233,7 @@ class _ChatsPageState extends State<ChatsPage> {
             }
 
             Future<void> runSearch(String raw) async {
+              searchQuery = raw;
               final query = raw.trim();
               searchDebounce?.cancel();
 
@@ -265,8 +299,8 @@ class _ChatsPageState extends State<ChatsPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(
-                      controller: searchController,
+                    TextFormField(
+                      initialValue: searchQuery,
                       onChanged: runSearch,
                       decoration: const InputDecoration(
                         labelText: 'Buscar por nombre o email',
@@ -289,7 +323,7 @@ class _ChatsPageState extends State<ChatsPage> {
                           style: const TextStyle(color: Colors.red),
                         ),
                       )
-                    else if (searchController.text.trim().length < 2)
+                    else if (searchQuery.trim().length < 2)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 12),
                         child: Text('Escribe al menos 2 caracteres.'),
@@ -325,9 +359,7 @@ class _ChatsPageState extends State<ChatsPage> {
                                   if (!modalContext.mounted || !dialogOpen) {
                                     return;
                                   }
-                                  dialogOpen = false;
-                                  searchDebounce?.cancel();
-                                  Navigator.of(dialogContext).pop(chat);
+                                  closeDialog(chat);
                                 } catch (e) {
                                   if (!mounted) {
                                     return;
@@ -365,8 +397,8 @@ class _ChatsPageState extends State<ChatsPage> {
       },
     );
 
+    await Future<void>.delayed(Duration.zero);
     searchDebounce?.cancel();
-    searchController.dispose();
 
     if (created == null || !mounted) {
       return;
@@ -389,8 +421,8 @@ class _ChatsPageState extends State<ChatsPage> {
 
   Future<void> _openCreateGroupDialog() async {
     final pageContext = context;
-    final nameController = TextEditingController();
-    final searchController = TextEditingController();
+    String groupName = '';
+    String searchQuery = '';
     final selected = <AppUser>[];
     UploadFilePayload? groupPhoto;
     List<AppUser> searchResults = const <AppUser>[];
@@ -452,62 +484,9 @@ class _ChatsPageState extends State<ChatsPage> {
               });
             }
 
-            Widget buildGroupPhotoPicker() {
-              final hasPhoto = groupPhoto != null;
-              return InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => pickGroupPhoto(setModalState),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(16),
-                    color: Theme.of(context).colorScheme.surface,
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                        foregroundImage: hasPhoto
-                            ? MemoryImage(Uint8List.fromList(groupPhoto!.bytes))
-                            : null,
-                        child: hasPhoto ? null : const Icon(Icons.image_outlined),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Foto del grupo',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                            Text(
-                              hasPhoto
-                                  ? groupPhoto!.fileName
-                                  : 'Opcional. Elegí una imagen para identificar el grupo.',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: () => hasPhoto
-                            ? clearGroupPhoto(setModalState)
-                            : pickGroupPhoto(setModalState),
-                        child: Text(hasPhoto ? 'Quitar' : 'Elegir foto'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
 
             Future<void> runSearch(String raw) async {
+              searchQuery = raw;
               final query = raw.trim();
               searchDebounce?.cancel();
 
@@ -562,9 +541,11 @@ class _ChatsPageState extends State<ChatsPage> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextField(
-                    controller: nameController,
-                    onChanged: (_) => setModalState(() {}),
+                  TextFormField(
+                    initialValue: groupName,
+                    onChanged: (value) => setModalState(() {
+                      groupName = value;
+                    }),
                     decoration: const InputDecoration(
                       labelText: 'Nombre del grupo',
                       border: OutlineInputBorder(),
@@ -572,7 +553,7 @@ class _ChatsPageState extends State<ChatsPage> {
                   ),
                   const SizedBox(height: 12),
                   FilledButton(
-                    onPressed: nameController.text.trim().length < 2
+                    onPressed: groupName.trim().length < 2
                         ? null
                         : () {
                             setModalState(() {
@@ -617,8 +598,8 @@ class _ChatsPageState extends State<ChatsPage> {
                       style: TextStyle(color: Colors.black54),
                     ),
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: searchController,
+                  TextFormField(
+                    initialValue: searchQuery,
                     onChanged: runSearch,
                     decoration: const InputDecoration(
                       labelText: 'Buscar usuarios',
@@ -644,7 +625,7 @@ class _ChatsPageState extends State<ChatsPage> {
                             ),
                           );
                         }
-                        if (searchController.text.trim().length < 2) {
+                        if (searchQuery.trim().length < 2) {
                           return const Center(
                             child: Text('Escribe al menos 2 caracteres para buscar.'),
                           );
@@ -700,7 +681,7 @@ class _ChatsPageState extends State<ChatsPage> {
 
             return PopScope(
               canPop: false,
-              onPopInvoked: (didPop) {
+              onPopInvokedWithResult: (didPop, result) {
                 if (didPop) {
                   return;
                 }
@@ -826,7 +807,7 @@ class _ChatsPageState extends State<ChatsPage> {
                                         FocusManager.instance.primaryFocus?.unfocus();
                                         try {
                                           final chat = await _apiService.createGroupChat(
-                                            name: nameController.text.trim(),
+                                            name: groupName.trim(),
                                             memberIds: selected.map((user) => user.id).toList(),
                                           );
                                           ChatPreview createdChat = chat;
@@ -877,9 +858,8 @@ class _ChatsPageState extends State<ChatsPage> {
       },
     );
 
+    await Future<void>.delayed(Duration.zero);
     searchDebounce?.cancel();
-    nameController.dispose();
-    searchController.dispose();
 
     if (created == null || !mounted) {
       return;

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -74,8 +75,31 @@ class AuthService {
   }
 
   Future<void> syncDevicePushToken() async {
-    // Notificaciones removidas — función no implementada.
-    return;
+    try {
+      final token = await getToken();
+      if (token == null || token.isEmpty) {
+        return;
+      }
+
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken == null || fcmToken.isEmpty) {
+        return;
+      }
+
+      await _authorizedPutJsonWithApiFallback(
+        '/usuarios/me/push-token',
+        {'pushToken': fcmToken},
+        token,
+      );
+    } catch (_) {
+      // No crítico: si falla el sync del token la app sigue funcionando.
+    }
   }
 
   Future<void> logout() async {

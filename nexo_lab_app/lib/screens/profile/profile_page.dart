@@ -250,8 +250,12 @@ class _ProfilePageState extends State<ProfilePage> {
       },
     );
 
-    nameController.dispose();
-    lastNameController.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.microtask(() {
+        nameController.dispose();
+        lastNameController.dispose();
+      });
+    });
   }
 
   Future<void> _changePassword() async {
@@ -403,9 +407,13 @@ class _ProfilePageState extends State<ProfilePage> {
       },
     );
 
-    currentController.dispose();
-    newController.dispose();
-    confirmController.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.microtask(() {
+        currentController.dispose();
+        newController.dispose();
+        confirmController.dispose();
+      });
+    });
   }
 
   Future<void> _changePhoto() async {

@@ -38,7 +38,9 @@ dependencies:
   http_parser: ^4.1.2
   file_picker: ^8.1.7
   flutter_secure_storage: ^10.0.0
-  # Firebase and local notifications removed
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+  flutter_local_notifications: ^22.0.1
 
 dev_dependencies:
   flutter_test:
