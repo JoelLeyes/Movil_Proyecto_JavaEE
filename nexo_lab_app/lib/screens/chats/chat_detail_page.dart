@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -62,23 +61,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Widget _buildAvatar({required String name, String? photoUrl, double radius = 20}) {
-    final resolved = resolvePhotoUrl(photoUrl);
-    if (resolved == null) {
-      return CircleAvatar(radius: radius, child: Text(initials(name)));
-    }
-
-    return ClipOval(
-      child: SizedBox(
-        width: radius * 2,
-        height: radius * 2,
-        child: Image.network(
-          resolved,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) {
-            return CircleAvatar(radius: radius, child: Text(initials(name)));
-          },
-        ),
-      ),
+    return buildProfileAvatar(
+      name: name,
+      photoUrl: photoUrl,
+      radius: radius,
     );
   }
 

@@ -37,29 +37,10 @@ class _ChatsPageState extends State<ChatsPage> {
     String? photoUrl,
     double radius = 24,
   }) {
-    final resolved = resolvePhotoUrl(photoUrl);
-    if (resolved == null) {
-      return CircleAvatar(
-        radius: radius,
-        child: Text(initials(name)),
-      );
-    }
-
-    return ClipOval(
-      child: SizedBox(
-        width: radius * 2,
-        height: radius * 2,
-        child: Image.network(
-          resolved,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) {
-            return CircleAvatar(
-              radius: radius,
-              child: Text(initials(name)),
-            );
-          },
-        ),
-      ),
+    return buildProfileAvatar(
+      name: name,
+      photoUrl: photoUrl,
+      radius: radius,
     );
   }
 
@@ -434,25 +415,6 @@ class _ChatsPageState extends State<ChatsPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (modalContext, setModalState) {
-            Future<void> runSearch(String raw) async {
-              final query = raw.trim();
-              searchDebounce?.cancel();
-
-              if (query.length < 2) {
-                setModalState(() {
-                  searching = false;
-                  searchResults = const <AppUser>[];
-                  searchError = null;
-                });
-                return;
-              }
-
-              setModalState(() {
-                searching = true;
-                searchError = null;
-              });
-
-
             Future<void> pickGroupPhoto(StateSetter setModalState) async {
               final result = await FilePicker.platform.pickFiles(
                 allowMultiple: false,
@@ -489,6 +451,7 @@ class _ChatsPageState extends State<ChatsPage> {
                 groupPhoto = null;
               });
             }
+
             Widget buildGroupPhotoPicker() {
               final hasPhoto = groupPhoto != null;
               return InkWell(
@@ -543,6 +506,25 @@ class _ChatsPageState extends State<ChatsPage> {
                 ),
               );
             }
+
+            Future<void> runSearch(String raw) async {
+              final query = raw.trim();
+              searchDebounce?.cancel();
+
+              if (query.length < 2) {
+                setModalState(() {
+                  searching = false;
+                  searchResults = const <AppUser>[];
+                  searchError = null;
+                });
+                return;
+              }
+
+              setModalState(() {
+                searching = true;
+                searchError = null;
+              });
+
               searchDebounce = Timer(const Duration(milliseconds: 350), () async {
                 try {
                   final results = await _apiService.searchUsers(query);
@@ -755,7 +737,57 @@ class _ChatsPageState extends State<ChatsPage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        buildGroupPhotoPicker(),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => pickGroupPhoto(setModalState),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Theme.of(context).dividerColor),
+                              borderRadius: BorderRadius.circular(16),
+                              color: Theme.of(context).colorScheme.surface,
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 24,
+                                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                                  foregroundImage: groupPhoto != null
+                                      ? MemoryImage(Uint8List.fromList(groupPhoto!.bytes))
+                                      : null,
+                                  child: groupPhoto == null ? const Icon(Icons.image_outlined) : null,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Foto del grupo',
+                                        style: TextStyle(fontWeight: FontWeight.w700),
+                                      ),
+                                      Text(
+                                        groupPhoto != null
+                                            ? groupPhoto!.fileName
+                                            : 'Opcional. Elegí una imagen para identificar el grupo.',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  onPressed: () => groupPhoto != null
+                                      ? clearGroupPhoto(setModalState)
+                                      : pickGroupPhoto(setModalState),
+                                  child: Text(groupPhoto != null ? 'Quitar' : 'Elegir foto'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           step == 1 ? 'Paso 1 de 2' : 'Paso 2 de 2',
@@ -891,34 +923,29 @@ class _ChatsPageState extends State<ChatsPage> {
           if (_user != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Center(
-                child: CircleAvatar(
-                          radius: 16,
-                          foregroundImage: resolvePhotoUrl(_user!.fotoPerfilUrl) == null
-                              ? null
-                              : NetworkImage(resolvePhotoUrl(_user!.fotoPerfilUrl)!),
-                          child: resolvePhotoUrl(_user!.fotoPerfilUrl) == null
-                              ? Text(
-                                  _user!.initials,
-                                  style: const TextStyle(fontSize: 11),
-                                )
-                              : null,
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ProfilePage(authService: widget.authService),
+                        ),
+                      )
+                      .then((_) => _bootstrap());
+                },
+                child: SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: buildProfileAvatar(
+                    name: _user!.name,
+                    photoUrl: _user!.fotoPerfilUrl,
+                    radius: 16,
+                    initialsStyle: const TextStyle(fontSize: 11),
+                  ),
                 ),
               ),
             ),
-          IconButton(
-            onPressed: () {
-              Navigator.of(context)
-                  .push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          ProfilePage(authService: widget.authService),
-                    ),
-                  )
-                  .then((_) => _bootstrap());
-            },
-            icon: const Icon(Icons.person),
-          ),
           IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
         ],
       ),
@@ -966,11 +993,10 @@ class _ChatsPageState extends State<ChatsPage> {
                           const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final chat = _filteredChats[index];
-                        final avatarUrl = resolvePhotoUrl(chat.avatarUrl);
                         return ListTile(
                           leading: _buildAvatar(
                             name: chat.name,
-                            photoUrl: avatarUrl,
+                            photoUrl: chat.avatarUrl,
                             radius: 24,
                           ),
                           title: Row(

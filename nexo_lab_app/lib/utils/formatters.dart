@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+
 String toBackendLocalIso(DateTime dt) {
   final local = dt.toLocal().toIso8601String();
   return local.split('.').first;
@@ -8,7 +12,7 @@ String? resolvePhotoUrl(String? rawUrl) {
   if (value.isEmpty) {
     return null;
   }
-  if (value.startsWith('http://') || value.startsWith('https://')) {
+  if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:')) {
     return value;
   }
 
@@ -33,6 +37,76 @@ String? resolvePhotoUrl(String? rawUrl) {
   }
 
   return value;
+}
+
+Widget buildProfileAvatar({
+  required String name,
+  String? photoUrl,
+  double radius = 24,
+  Color? backgroundColor,
+  TextStyle? initialsStyle,
+}) {
+  final initialsText = initials(name);
+  final url = photoUrl?.trim();
+
+  if (url == null || url.isEmpty) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: backgroundColor ?? const Color(0xFF0C447C),
+      child: Text(
+        initialsText,
+        style: initialsStyle ?? const TextStyle(color: Colors.white),
+      ),
+    );
+  }
+
+  if (url.startsWith('data:')) {
+    final commaIndex = url.indexOf(',');
+    if (commaIndex > 0) {
+      final raw = url.substring(commaIndex + 1);
+      try {
+        return CircleAvatar(
+          radius: radius,
+          backgroundImage: MemoryImage(base64Decode(raw)),
+        );
+      } catch (_) {
+        // Fallback to initials.
+      }
+    }
+  }
+
+  final resolved = resolvePhotoUrl(url);
+  if (resolved == null) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: backgroundColor ?? const Color(0xFF0C447C),
+      child: Text(
+        initialsText,
+        style: initialsStyle ?? const TextStyle(color: Colors.white),
+      ),
+    );
+  }
+
+  return ClipOval(
+    child: SizedBox(
+      width: radius * 2,
+      height: radius * 2,
+      child: Image.network(
+        resolved,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return CircleAvatar(
+            radius: radius,
+            backgroundColor: backgroundColor ?? const Color(0xFF0C447C),
+            child: Text(
+              initialsText,
+              style: initialsStyle ?? const TextStyle(color: Colors.white),
+            ),
+          );
+        },
+      ),
+    ),
+  );
 }
 
 String initials(String name) {

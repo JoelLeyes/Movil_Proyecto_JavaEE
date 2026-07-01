@@ -1,11 +1,10 @@
-import 'dart:convert';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/chat_models.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
+import '../../utils/formatters.dart';
 import '../auth/welcome_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -452,42 +451,11 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildAvatar(AppUser user) {
-    final url = user.fotoPerfilUrl;
-    final initials = user.initials;
-
-    if (url == null || url.isEmpty) {
-      return CircleAvatar(
-        radius: 38,
-        backgroundColor: const Color(0xFF0C447C),
-        child: Text(
-          initials,
-          style: const TextStyle(color: Colors.white, fontSize: 22),
-        ),
-      );
-    }
-
-    if (url.startsWith('data:')) {
-      final commaIndex = url.indexOf(',');
-      if (commaIndex > 0) {
-        final raw = url.substring(commaIndex + 1);
-        try {
-          return CircleAvatar(
-            radius: 38,
-            backgroundImage: MemoryImage(base64Decode(raw)),
-          );
-        } catch (_) {
-          // Fallback a iniciales.
-        }
-      }
-    }
-
-    return CircleAvatar(
+    return buildProfileAvatar(
+      name: user.name,
+      photoUrl: user.fotoPerfilUrl,
       radius: 38,
-      backgroundColor: const Color(0xFF0C447C),
-      child: Text(
-        initials,
-        style: const TextStyle(color: Colors.white, fontSize: 22),
-      ),
+      initialsStyle: const TextStyle(color: Colors.white, fontSize: 22),
     );
   }
 
